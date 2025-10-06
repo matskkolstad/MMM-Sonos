@@ -15,6 +15,10 @@ En MagicMirror²-modul som automatisk finner Sonos-sonene dine og viser hva som 
 - 🧭 Juster plassering/justering uten ekstra CSS – velg mellom venstre, senter, høyre eller jevn fordeling.
 - 🕒 Vis siste oppdateringstid og (valgfritt) skjul modulen når ingenting spiller.
 
+## Ansvarsfraskrivelse
+
+Denne modulen er utviklet ved hjelp av AI-assistanse og ble laget primært for mitt eget bruk. Repoet deles i håp om at andre kan ha glede av det, men jeg kan ikke love videre vedlikehold eller oppdateringer. Brukere er selv ansvarlige for å holde modulen oppdatert, tilpasse den etter egne behov og følge med på endringer som kan påvirke funksjonaliteten.
+
 ## Kom i gang
 
 1. Gå til MagicMirror sin `modules`-mappe og klon (eller kopier) katalogen:
