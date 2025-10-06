@@ -17,7 +17,7 @@ module.exports = NodeHelper.create({
     const fallbackConfig = this._readConfigFromFile();
     if (fallbackConfig) {
       this._configure(fallbackConfig).catch((error) => {
-        this.sendError('Kunne ikke starte MMM-Sonos med fallback-konfig', error);
+        this.sendError('Failed to start MMM-Sonos with fallback config', error);
       });
     }
   },
@@ -38,7 +38,7 @@ module.exports = NodeHelper.create({
   },
 
   async _configure(config) {
-    Log.log(`[MMM-Sonos] Mottok config: ${JSON.stringify(config)}`);
+  Log.log(`[MMM-Sonos] Received config: ${JSON.stringify(config)}`);
     this.config = Object.assign(
       {
         updateInterval: 15 * 1000,
@@ -55,10 +55,10 @@ module.exports = NodeHelper.create({
       config
     );
 
-    this.sendDebug('Konfigurasjon oppdatert', this.config);
+    this.sendDebug('Configuration updated', this.config);
 
     if (this.config.debug) {
-      Log.log(`[MMM-Sonos] Konfigurasjon: ${JSON.stringify(this.config)}`);
+      Log.log(`[MMM-Sonos] Configuration: ${JSON.stringify(this.config)}`);
     }
 
     this._clearTimer();
@@ -77,7 +77,7 @@ module.exports = NodeHelper.create({
     }
 
     this.isDiscovering = true;
-    this.sendDebug('Starter Sonos discovery');
+  this.sendDebug('Starting Sonos discovery');
 
     try {
       if (this.config.discoveryTimeout !== 0) {
@@ -85,7 +85,7 @@ module.exports = NodeHelper.create({
         const autoDevice = await this.discovery.discover({ timeout: this.config.discoveryTimeout });
         if (autoDevice) {
           this.coordinator = autoDevice;
-          this.sendDebug('Fant Sonos-enhet via nettverks-søk', {
+          this.sendDebug('Discovered Sonos device via network search', {
             host: this.coordinator.host,
             port: this.coordinator.port,
             name: this.coordinator.name
@@ -93,13 +93,13 @@ module.exports = NodeHelper.create({
         }
       }
     } catch (error) {
-      this.sendError('Oppdagelse feilet', error);
+      this.sendError('Discovery failed', error);
     } finally {
       if (!this.coordinator) {
         const fallback = await this._discoverViaKnownDevices();
         if (fallback) {
           this.coordinator = fallback;
-          this.sendDebug('Fant Sonos-enhet via knownDevices', {
+          this.sendDebug('Found Sonos device via knownDevices', {
             host: this.coordinator.host,
             port: this.coordinator.port
           });
@@ -107,7 +107,7 @@ module.exports = NodeHelper.create({
       }
 
       if (!this.coordinator) {
-        this.sendDebug('Fant ingen Sonos-enhet');
+        this.sendDebug('No Sonos device found');
       }
 
       this.isDiscovering = false;
@@ -127,7 +127,7 @@ module.exports = NodeHelper.create({
         });
         return device;
       } catch (error) {
-        this.sendDebug('Klarte ikke å nå kjent enhet', host, error?.message || error);
+        this.sendDebug('Unable to reach known device', host, error?.message || error);
       }
     }
     return null;
@@ -142,7 +142,7 @@ module.exports = NodeHelper.create({
       const moduleEntry = (fullConfig.modules || []).find((entry) => entry.module === 'MMM-Sonos');
       return moduleEntry?.config ? { ...moduleEntry.config } : null;
     } catch (error) {
-      this.sendDebug('Kunne ikke lese config fra config.js', error?.message || error);
+      this.sendDebug('Could not read config from config.js', error?.message || error);
       return null;
     }
   },
@@ -160,11 +160,11 @@ module.exports = NodeHelper.create({
       const formatted = await this._mapGroups(groups);
 
       if (!formatted.length && this.config.hideWhenNothingPlaying) {
-        this.sendDebug('Ingen aktive grupper funnet. Sender tom payload.');
+        this.sendDebug('No active groups found. Sending empty payload.');
       }
 
       if (this.config.debug) {
-        Log.log(`[MMM-Sonos] Sender grupper: ${JSON.stringify(formatted)}`);
+        Log.log(`[MMM-Sonos] Sending groups: ${JSON.stringify(formatted)}`);
       }
 
       this.lastPayload = formatted;
@@ -173,7 +173,7 @@ module.exports = NodeHelper.create({
         timestamp: Date.now()
       });
     } catch (error) {
-      this.sendError('Kunne ikke hente Sonos-data', error);
+      this.sendError('Failed to fetch Sonos data', error);
       this.coordinator = null; // Tving re-discovery
     }
   },
@@ -210,7 +210,7 @@ module.exports = NodeHelper.create({
       let skipGroup = false;
 
       if (hiddenGroups.has((id || '').toLowerCase()) || hiddenGroups.has((name || '').toLowerCase())) {
-        this.sendDebug('Hopper over skjult gruppe', name || id);
+        this.sendDebug('Skipping hidden group', name || id);
         continue;
       }
 
@@ -220,7 +220,7 @@ module.exports = NodeHelper.create({
           continue;
         }
         if (hiddenSpeakers.has(displayName.toLowerCase())) {
-          this.sendDebug('Hopper over gruppe fordi medlem er skjult', displayName, name);
+          this.sendDebug('Skipping group because member is hidden', displayName, name);
           skipGroup = true;
           break;
         }
@@ -232,7 +232,7 @@ module.exports = NodeHelper.create({
       }
 
       if (!coordinator) {
-        this.sendDebug('Ingen koordinator for gruppe', name || id);
+        this.sendDebug('No coordinator for group', name || id);
         continue;
       }
 
@@ -241,11 +241,11 @@ module.exports = NodeHelper.create({
         const state = typeof stateRaw === 'string' ? stateRaw.toLowerCase() : 'unknown';
 
         if (state !== 'playing' && !this.config.showWhenPaused) {
-          this.sendDebug('Skipper gruppe fordi den ikke spiller', name || id, state);
+          this.sendDebug('Skipping group because it is not playing', name || id, state);
           continue;
         }
         if (state === 'stopped' && this.config.hideWhenNothingPlaying) {
-          this.sendDebug('Skjuler stoppet gruppe fordi hideWhenNothingPlaying er aktiv', name || id);
+          this.sendDebug('Hiding stopped group because hideWhenNothingPlaying is enabled', name || id);
           continue;
         }
 
@@ -264,7 +264,7 @@ module.exports = NodeHelper.create({
           members: members.length ? members : [coordinatorName || name || 'Sonos']
         });
       } catch (error) {
-        this.sendDebug('Feilet å hente data for gruppe', name || id, error?.message || error);
+        this.sendDebug('Failed to fetch data for group', name || id, error?.message || error);
       }
     }
   const ordered = formatted.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -280,7 +280,7 @@ module.exports = NodeHelper.create({
       try {
         return group.CoordinatorDevice();
       } catch (error) {
-        this.sendDebug('Feilet å hente koordinator fra CoordinatorDevice()', error?.message || error);
+        this.sendDebug('Failed to resolve coordinator from CoordinatorDevice()', error?.message || error);
       }
     }
 
@@ -293,7 +293,7 @@ module.exports = NodeHelper.create({
       try {
         return new Sonos(group.host, group.port || 1400);
       } catch (error) {
-        this.sendDebug('Feilet å bygge Sonos-instans fra host', group.host, error?.message || error);
+        this.sendDebug('Failed to create Sonos instance from host', group.host, error?.message || error);
       }
     }
 
@@ -308,7 +308,7 @@ module.exports = NodeHelper.create({
       const description = coordinator.deviceDescription || (await coordinator.deviceDescription());
       return description?.roomName || description?.displayName || coordinator.name || coordinator.host;
     } catch (error) {
-      this.sendDebug('Kunne ikke hente koordinatornavn', error?.message || error);
+      this.sendDebug('Unable to fetch coordinator name', error?.message || error);
       return coordinator.name || coordinator.host;
     }
   },
@@ -365,7 +365,7 @@ module.exports = NodeHelper.create({
   sendError(context, error) {
     const payload = {
       context,
-      message: error?.message || error || 'Ukjent feil'
+      message: error?.message || error || 'Unknown error'
     };
     this.sendSocketNotification('SONOS_ERROR', payload);
   }

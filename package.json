@@ -1,7 +1,7 @@
 {
   "name": "mmm-sonos",
   "version": "1.0.0",
-  "description": "MagicMirror²-modul som viser hva som spilles på Sonos-høyttalere.",
+  "description": "MagicMirror² module that shows what is playing on your Sonos speakers.",
   "main": "MMM-Sonos.js",
   "scripts": {
     "start": "node node_helper.js",
@@ -11,7 +11,7 @@
     "magicmirror",
     "sonos",
     "smart-home",
-    "musik"
+    "music"
   ],
   "author": "",
   "license": "MIT",

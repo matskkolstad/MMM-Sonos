@@ -24,7 +24,7 @@ Module.register('MMM-Sonos', {
     showPlaybackState: false,
     showLastUpdated: false,
     timeFormat24: true,
-    dateLocale: 'nb-NO',
+  dateLocale: 'en-US',
     maxTextLines: 2,
     accentuateActive: true,
     showAlbum: false,
@@ -38,7 +38,7 @@ Module.register('MMM-Sonos', {
     this.lastUpdated = null;
     this.updateTimer = null;
 
-    this._log('Starter MMM-Sonos modul');
+  this._log('Starting MMM-Sonos module');
     this.sendSocketNotification('SONOS_CONFIG', this.config);
     this.scheduleRefresh();
   },
@@ -56,13 +56,13 @@ Module.register('MMM-Sonos', {
     }
 
     this.updateTimer = setInterval(() => {
-      this._log('Ber om oppdatering fra node_helper');
+  this._log('Requesting update from node_helper');
       this.sendSocketNotification('SONOS_REQUEST');
     }, Math.max(this.config.updateInterval, 5000));
   },
 
   socketNotificationReceived(notification, payload) {
-    this._log('Mottok socket-notifikasjon', notification);
+  this._log('Received socket notification', notification);
 
     switch (notification) {
       case 'SONOS_DATA':
