@@ -13,7 +13,15 @@
     "smart-home",
     "music"
   ],
-  "author": "",
+  "author": "Mats Kjoshagen Kolstad <matskko@uio.no>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/matskkolstad/MMM-Sonos.git"
+  },
+  "bugs": {
+    "url": "https://github.com/matskkolstad/MMM-Sonos/issues"
+  },
+  "homepage": "https://github.com/matskkolstad/MMM-Sonos#readme",
   "license": "MIT",
   "dependencies": {
     "sonos": "^1.14.1"
