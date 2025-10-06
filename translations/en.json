@@ -1,0 +1,13 @@
+{
+  "ERROR": "Error",
+  "NO_ACTIVE_SONOS": "Nothing is playing right now",
+  "NO_VISIBLE_SONOS": "No speakers are visible with the current filters",
+  "UPDATED": "Updated",
+  "UNKNOWN_TRACK": "Unknown track",
+  "PLAYING": "Playing",
+  "PAUSED_PLAYBACK": "Paused",
+  "PAUSED": "Paused",
+  "STOPPED": "Stopped",
+  "TRANSITIONING": "Loading",
+  "BUFFERING": "Buffering"
+}

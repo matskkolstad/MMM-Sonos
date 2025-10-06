@@ -1,0 +1,13 @@
+{
+  "ERROR": "Feil",
+  "NO_ACTIVE_SONOS": "Ingen høyttalere spiller akkurat nå",
+  "NO_VISIBLE_SONOS": "Ingen høyttalere vises med gjeldende filter",
+  "UPDATED": "Oppdatert",
+  "UNKNOWN_TRACK": "Ukjent spor",
+  "PLAYING": "Spiller",
+  "PAUSED_PLAYBACK": "Pauset",
+  "PAUSED": "Pauset",
+  "STOPPED": "Stoppet",
+  "TRANSITIONING": "Laster",
+  "BUFFERING": "Bufrer"
+}

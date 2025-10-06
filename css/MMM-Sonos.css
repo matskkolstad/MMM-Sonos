@@ -1,0 +1,197 @@
+:root {
+  --mmm-sonos-font-scale: 1;
+  --mmm-sonos-album-size: 80px;
+  --mmm-sonos-gap: 0.65rem;
+  --mmm-sonos-border-radius: 12px;
+  --mmm-sonos-bg: rgba(0, 0, 0, 0.35);
+  --mmm-sonos-active: rgba(255, 255, 255, 0.2);
+  --mmm-sonos-paused: rgba(255, 255, 255, 0.08);
+  --mmm-sonos-card-min: 150px;
+}
+
+.mmm-sonos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mmm-sonos-gap);
+  font-size: calc(1rem * var(--mmm-sonos-font-scale));
+  align-items: stretch;
+  width: 100%;
+}
+
+.mmm-sonos--hidden {
+  display: none !important;
+}
+
+.mmm-sonos--mode-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--mmm-sonos-columns, 2), minmax(var(--mmm-sonos-card-min), 1fr));
+  width: 100%;
+  justify-items: center;
+}
+
+.mmm-sonos--mode-row {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  width: 100%;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.mmm-sonos--nowrap .mmm-sonos__title,
+.mmm-sonos--nowrap .mmm-sonos__artist,
+.mmm-sonos--nowrap .mmm-sonos__album,
+.mmm-sonos--nowrap .mmm-sonos__members {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mmm-sonos__group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  align-items: center;
+  background: var(--mmm-sonos-bg);
+  padding: 0.55rem 0.65rem;
+  border-radius: var(--mmm-sonos-border-radius);
+  min-width: var(--mmm-sonos-card-min);
+  box-shadow: 0 20px 40px -24px rgba(0, 0, 0, 0.65);
+  position: relative;
+  transition: transform 0.3s ease, box-shadow 0.3s ease, background 0.3s ease, opacity 0.3s ease;
+  flex: 1 1 var(--mmm-sonos-card-min);
+  max-width: 100%;
+  text-align: center;
+}
+
+.mmm-sonos--mode-grid .mmm-sonos__group {
+  width: 100%;
+}
+
+.mmm-sonos--mode-row .mmm-sonos__group {
+  flex: 0 0 auto;
+  min-width: var(--mmm-sonos-card-min);
+}
+
+.mmm-sonos__group:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 30px 60px -32px rgba(0, 0, 0, 0.8);
+}
+
+.mmm-sonos__group--active {
+  background: linear-gradient(135deg, var(--mmm-sonos-active), rgba(255, 255, 255, 0.05));
+}
+
+.mmm-sonos__group--paused {
+  opacity: 0.65;
+  background: var(--mmm-sonos-paused);
+}
+
+.mmm-sonos__art {
+  width: var(--mmm-sonos-album-size);
+  height: var(--mmm-sonos-album-size);
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+  position: relative;
+}
+
+.mmm-sonos__art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.mmm-sonos__content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+  width: 100%;
+  align-items: center;
+}
+
+.mmm-sonos__header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.mmm-sonos__group-name {
+  font-size: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.mmm-sonos__state {
+  font-size: 0.58rem;
+  padding: 0.05rem 0.32rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.mmm-sonos__track {
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+  align-items: center;
+}
+
+.mmm-sonos__title {
+  --mmm-sonos-title-lines: 2;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-clamp: var(--mmm-sonos-title-lines);
+  -webkit-line-clamp: var(--mmm-sonos-title-lines);
+  text-align: center;
+}
+
+.mmm-sonos__artist {
+  font-size: 0.74rem;
+  opacity: 0.8;
+  text-align: center;
+}
+
+.mmm-sonos__album {
+  font-size: 0.66rem;
+  opacity: 0.6;
+  text-align: center;
+}
+
+.mmm-sonos__members {
+  font-size: 0.64rem;
+  opacity: 0.7;
+  white-space: normal;
+  text-align: center;
+}
+
+.mmm-sonos__empty {
+  font-size: 0.9rem;
+  opacity: 0.6;
+}
+
+.mmm-sonos__timestamp {
+  margin-top: 0.5rem;
+  font-size: 0.65rem;
+  opacity: 0.4;
+  text-transform: uppercase;
+}
+
+@media (max-width: 768px) {
+  .mmm-sonos__group {
+    width: 100%;
+  }
+}
