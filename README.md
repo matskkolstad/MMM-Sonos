@@ -4,6 +4,8 @@ A MagicMirror² module that automatically discovers your Sonos zones and shows w
 
 **Created by:** Mats Kjoshagen Kolstad
 
+![MMM-Sonos screenshot](docs/screenshot.png)
+
 ## Highlights
 
 - 🔍 Automatic Sonos discovery – no manual IP configuration required.
@@ -19,7 +21,7 @@ A MagicMirror² module that automatically discovers your Sonos zones and shows w
 
 This module was produced with assistance from AI tools and was originally created for my personal use. The repository is shared in the hope that it is useful to others, but I cannot guarantee ongoing maintenance or updates. Users are responsible for keeping the module updated, adapting it to their own setup, and tracking upstream changes that may affect functionality.
 
-## Getting started
+## Installation
 
 1. Navigate to the MagicMirror `modules` folder and clone (or copy) the directory:
 
@@ -58,12 +60,24 @@ This module was produced with assistance from AI tools and was originally create
        showWhenPaused: false,
        showPlaybackState: false,
        showLastUpdated: false,
-       cardMinWidth: 150
+   cardMinWidth: 150,
      }
    }
    ```
 
 4. Start (or restart) MagicMirror². The module appears once the first Sonos group is discovered.
+
+## Update
+
+When a new version is tagged, update the module with:
+
+```pwsh
+cd ~/MagicMirror/modules/MMM-Sonos
+git pull
+npm install
+```
+
+Restart MagicMirror² afterwards to load the latest code.
 
 ## Configuration
 
