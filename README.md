@@ -119,12 +119,32 @@ Restart MagicMirror² afterwards to load the latest code.
 - **Responsive layout:** The row and grid layouts adapt to smaller displays and switch orientation whenever needed.
 - **Snappy updates:** Polling combined with caching keeps the UI fresh without noticeable lag.
 
+## Development
+
+The module includes several npm scripts for development and maintenance:
+
+```bash
+npm run lint    # Run ESLint to check code quality
+npm run audit   # Check for security vulnerabilities in dependencies
+npm start       # Run the node helper directly (for testing)
+```
+
+### Security Notes
+
+This module uses dependency overrides to mitigate known security vulnerabilities in transitive dependencies:
+- **axios**: Overridden to `^1.12.0` (fixes CSRF, SSRF, and DoS vulnerabilities)
+- **xml2js**: Overridden to `^0.6.2` (fixes prototype pollution vulnerability)
+- **ip**: Overridden to `^2.0.1` (latest available version)
+
+**Note:** The `ip` package has a known SSRF vulnerability (GHSA-2p57-rm9w-gvfp) that affects all versions ≤2.0.1. This is a transitive dependency from the `sonos` package. No patch is currently available. The vulnerability requires specific network configurations to be exploitable and does not affect typical MagicMirror setups.
+
 ## Troubleshooting
 
 - Set `debug: true` to inspect what happens in both the browser module and the node helper (visible in the MagicMirror console).
 - Increase `discoveryTimeout` if no players are found. On mesh networks 10000–15000 ms is sometimes required.
 - Run `npm install` again whenever dependencies appear to be missing.
 - Missing album art? Try `forceHttps: true` if MagicMirror runs over HTTPS and the browser blocks plain HTTP images.
+- To check for dependency vulnerabilities, run `npm run audit`.
 
 ## Roadmap ideas
 
