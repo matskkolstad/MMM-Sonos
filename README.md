@@ -136,7 +136,7 @@ This module uses dependency overrides to mitigate known security vulnerabilities
 - **xml2js**: Overridden to `^0.6.2` (fixes prototype pollution vulnerability)
 - **ip**: Overridden to `^2.0.1` (latest available version)
 
-**Note:** The `ip` package has a known SSRF vulnerability (GHSA-2p57-rm9w-gvfp) that affects all versions ≤2.0.1. This is a transitive dependency from the `sonos` package. No patch is currently available. The vulnerability requires specific network configurations to be exploitable and does not affect typical MagicMirror setups.
+**Note:** The `ip` package has a known SSRF vulnerability (GHSA-2p57-rm9w-gvfp) that affects all versions ≤2.0.1. This is a transitive dependency from the `sonos` package. No patch is currently available. The vulnerability relates to improper categorization in the `isPublic` function. Users should assess their own network configuration and threat model to determine if this poses a risk in their environment.
 
 ## Troubleshooting
 
