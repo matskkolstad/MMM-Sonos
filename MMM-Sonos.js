@@ -184,14 +184,32 @@ Module.register('MMM-Sonos', {
       return null;
     }
 
+    // Determine alignment once for the entire group
+    const alignment = this.config.textAlignment || 'center';
+
     const container = document.createElement('div');
     container.className = 'mmm-sonos__group';
     container.dataset.groupId = group.id;
     container.style.display = 'flex';
-    container.style.flexDirection = 'column';
-    container.style.alignItems = 'center';
     container.style.gap = '0.45rem';
-    container.style.textAlign = 'center';
+
+    // Apply layout based on textAlignment
+    if (alignment === 'center') {
+      // Vertical layout: album art on top, text below
+      container.style.flexDirection = 'column';
+      container.style.alignItems = 'center';
+      container.style.textAlign = 'center';
+    } else if (alignment === 'left') {
+      // Horizontal layout: text on left, album art on right
+      container.style.flexDirection = 'row-reverse';
+      container.style.alignItems = 'center';
+      container.style.textAlign = 'left';
+    } else if (alignment === 'right') {
+      // Horizontal layout: album art on left, text on right
+      container.style.flexDirection = 'row';
+      container.style.alignItems = 'center';
+      container.style.textAlign = 'right';
+    }
 
     const cardWidth = Number(this.config.cardMinWidth);
     if (!Number.isNaN(cardWidth) && cardWidth > 0) {
@@ -237,21 +255,36 @@ Module.register('MMM-Sonos', {
     content.className = 'mmm-sonos__content';
     content.style.display = 'flex';
     content.style.flexDirection = 'column';
-    content.style.alignItems = 'center';
     content.style.gap = '0.3rem';
     content.style.width = '100%';
+
+    // Align content based on textAlignment
+    if (alignment === 'center') {
+      content.style.alignItems = 'center';
+    } else if (alignment === 'left') {
+      content.style.alignItems = 'flex-start';
+    } else if (alignment === 'right') {
+      content.style.alignItems = 'flex-end';
+    }
 
     const header = document.createElement('div');
     header.className = 'mmm-sonos__header';
     header.style.display = 'flex';
     header.style.flexDirection = 'column';
-    header.style.alignItems = 'center';
     header.style.gap = '0.25rem';
+
+    // Align header based on textAlignment
+    if (alignment === 'center') {
+      header.style.alignItems = 'center';
+    } else if (alignment === 'left') {
+      header.style.alignItems = 'flex-start';
+    } else if (alignment === 'right') {
+      header.style.alignItems = 'flex-end';
+    }
 
     const groupName = document.createElement('span');
     groupName.className = 'mmm-sonos__group-name';
     groupName.innerText = group.name;
-    groupName.style.textAlign = 'center';
     header.appendChild(groupName);
 
     if (this.config.showPlaybackState && group.playbackState) {
@@ -269,8 +302,16 @@ Module.register('MMM-Sonos', {
       titleWrapper.className = 'mmm-sonos__track';
       titleWrapper.style.display = 'flex';
       titleWrapper.style.flexDirection = 'column';
-      titleWrapper.style.alignItems = 'center';
       titleWrapper.style.gap = '0.08rem';
+
+      // Align track info based on textAlignment
+      if (alignment === 'center') {
+        titleWrapper.style.alignItems = 'center';
+      } else if (alignment === 'left') {
+        titleWrapper.style.alignItems = 'flex-start';
+      } else if (alignment === 'right') {
+        titleWrapper.style.alignItems = 'flex-end';
+      }
 
       const title = document.createElement('div');
       title.className = 'mmm-sonos__title';
@@ -278,14 +319,12 @@ Module.register('MMM-Sonos', {
       if (this.config.maxTextLines > 0) {
         title.style.setProperty('--mmm-sonos-title-lines', this.config.maxTextLines);
       }
-      title.style.textAlign = 'center';
       titleWrapper.appendChild(title);
 
       if (group.artist) {
         const artist = document.createElement('div');
         artist.className = 'mmm-sonos__artist';
         artist.innerText = group.artist;
-        artist.style.textAlign = 'center';
         titleWrapper.appendChild(artist);
       }
 
@@ -293,7 +332,6 @@ Module.register('MMM-Sonos', {
         const album = document.createElement('div');
         album.className = 'mmm-sonos__album';
         album.innerText = group.album;
-        album.style.textAlign = 'center';
         titleWrapper.appendChild(album);
       }
 
@@ -304,7 +342,6 @@ Module.register('MMM-Sonos', {
       const members = document.createElement('div');
       members.className = 'mmm-sonos__members';
       members.innerText = group.members.join(', ');
-      members.style.textAlign = 'center';
       content.appendChild(members);
     }
 
