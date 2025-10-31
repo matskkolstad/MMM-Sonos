@@ -435,9 +435,7 @@ Module.register('MMM-Sonos', {
 
   _log(...args) {
     if (this.config.debug) {
-      /* eslint-disable no-console */
       console.log('[MMM-Sonos]', ...args);
-      /* eslint-enable no-console */
     }
   }
 });

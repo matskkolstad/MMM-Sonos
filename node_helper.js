@@ -137,7 +137,6 @@ module.exports = NodeHelper.create({
     try {
       const configPath = path.resolve(__dirname, '..', '..', 'config', 'config.js');
       delete require.cache[configPath];
-      // eslint-disable-next-line global-require
       const fullConfig = require(configPath);
       const moduleEntry = (fullConfig.modules || []).find((entry) => entry.module === 'MMM-Sonos');
       return moduleEntry?.config ? { ...moduleEntry.config } : null;

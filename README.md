@@ -132,7 +132,7 @@ npm start       # Run the node helper directly (for testing)
 ### Security Notes
 
 This module uses dependency overrides to mitigate known security vulnerabilities in transitive dependencies:
-- **axios**: Overridden to `^1.12.0` (fixes CSRF, SSRF, and DoS vulnerabilities)
+- **axios**: Overridden to `^1.13.1` (fixes CSRF, SSRF, and DoS vulnerabilities)
 - **xml2js**: Overridden to `^0.6.2` (fixes prototype pollution vulnerability)
 - **ip**: Overridden to `^2.0.1` (latest available version)
 
