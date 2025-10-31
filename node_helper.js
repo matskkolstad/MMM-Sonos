@@ -47,8 +47,8 @@ module.exports = NodeHelper.create({
         hiddenGroups: [],
         knownDevices: [],
         maxGroups: 6,
-        showWhenPaused: true,
-        hideWhenNothingPlaying: false,
+        showWhenPaused: false,
+        hideWhenNothingPlaying: true,
         forceHttps: false,
         debug: false
       },
