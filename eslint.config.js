@@ -16,19 +16,6 @@ module.exports = [
     }
   },
   {
-    files: ['*.js'],
-    ignores: ['eslint.config.js', 'node_helper.js'],
-    languageOptions: {
-      ecmaVersion: 2021,
-      sourceType: 'script',
-      globals: {
-        ...globals.browser,
-        ...globals.es2021,
-        Module: 'readonly'
-      }
-    }
-  },
-  {
     files: ['node_helper.js'],
     languageOptions: {
       ecmaVersion: 2021,
@@ -36,6 +23,18 @@ module.exports = [
       globals: {
         ...globals.node,
         ...globals.es2021
+      }
+    }
+  },
+  {
+    files: ['MMM-Sonos.js'],
+    languageOptions: {
+      ecmaVersion: 2021,
+      sourceType: 'script',
+      globals: {
+        ...globals.browser,
+        ...globals.es2021,
+        Module: 'readonly'
       }
     }
   }
