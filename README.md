@@ -67,6 +67,24 @@ This module was produced with assistance from AI tools and was originally create
 
 4. Start (or restart) MagicMirror². The module appears once the first Sonos group is discovered.
 
+### Example with New Features
+
+To use the new text alignment and size features:
+
+```javascript
+{
+  module: 'MMM-Sonos',
+  position: 'bottom_right',
+  config: {
+    textAlignment: 'right',  // Album on left, text on right (left-aligned)
+    textSize: 18,            // Override text size to 18px
+    albumArtSize: 100,       // Larger album art
+    displayMode: 'grid',
+    columns: 2
+  }
+}
+```
+
 ## Update
 
 When a new version is tagged, update the module with:
