@@ -11,6 +11,7 @@ Module.register('MMM-Sonos', {
     displayMode: 'row', // auto | grid | row
     columns: 2,
     fontScale: 1,
+    textSize: null,
     albumArtSize: 80,
     wrapText: true,
     textAlignment: 'center',
@@ -99,6 +100,10 @@ Module.register('MMM-Sonos', {
     const wrapper = document.createElement('div');
     wrapper.classList.add('mmm-sonos');
     wrapper.style.setProperty('--mmm-sonos-font-scale', this.config.fontScale);
+    const textSizeValue = this._coercePixelValue(this.config.textSize, null);
+    if (textSizeValue) {
+      wrapper.style.fontSize = textSizeValue;
+    }
     const albumSizeValue = this._coercePixelValue(this.config.albumArtSize, this.defaults.albumArtSize);
     if (albumSizeValue) {
       wrapper.style.setProperty('--mmm-sonos-album-size', albumSizeValue);
@@ -201,14 +206,16 @@ Module.register('MMM-Sonos', {
       container.style.textAlign = 'center';
     } else if (alignment === 'left') {
       // Horizontal layout: text on left, album art on right
+      // Text should be right-aligned to hug the album art
       container.style.flexDirection = 'row-reverse';
       container.style.alignItems = 'center';
-      container.style.textAlign = 'left';
+      container.style.textAlign = 'right';
     } else if (alignment === 'right') {
       // Horizontal layout: album art on left, text on right
+      // Text should be left-aligned to hug the album art
       container.style.flexDirection = 'row';
       container.style.alignItems = 'center';
-      container.style.textAlign = 'right';
+      container.style.textAlign = 'left';
     }
 
     const cardWidth = Number(this.config.cardMinWidth);
@@ -262,9 +269,11 @@ Module.register('MMM-Sonos', {
     if (alignment === 'center') {
       content.style.alignItems = 'center';
     } else if (alignment === 'left') {
-      content.style.alignItems = 'flex-start';
-    } else if (alignment === 'right') {
+      // When text is on left, align items to the right (towards album)
       content.style.alignItems = 'flex-end';
+    } else if (alignment === 'right') {
+      // When text is on right, align items to the left (towards album)
+      content.style.alignItems = 'flex-start';
     }
 
     const header = document.createElement('div');
@@ -277,9 +286,11 @@ Module.register('MMM-Sonos', {
     if (alignment === 'center') {
       header.style.alignItems = 'center';
     } else if (alignment === 'left') {
-      header.style.alignItems = 'flex-start';
-    } else if (alignment === 'right') {
+      // When text is on left, align items to the right (towards album)
       header.style.alignItems = 'flex-end';
+    } else if (alignment === 'right') {
+      // When text is on right, align items to the left (towards album)
+      header.style.alignItems = 'flex-start';
     }
 
     const groupName = document.createElement('span');
@@ -308,9 +319,11 @@ Module.register('MMM-Sonos', {
       if (alignment === 'center') {
         titleWrapper.style.alignItems = 'center';
       } else if (alignment === 'left') {
-        titleWrapper.style.alignItems = 'flex-start';
-      } else if (alignment === 'right') {
+        // When text is on left, align items to the right (towards album)
         titleWrapper.style.alignItems = 'flex-end';
+      } else if (alignment === 'right') {
+        // When text is on right, align items to the left (towards album)
+        titleWrapper.style.alignItems = 'flex-start';
       }
 
       const title = document.createElement('div');

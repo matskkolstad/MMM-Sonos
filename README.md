@@ -92,10 +92,11 @@ Restart MagicMirror² afterwards to load the latest code.
 | `displayMode` | `'row'` | `auto`, `grid`, or `row`. `row` keeps groups on a single horizontal line with scrolling if required. `grid` arranges cards across `columns` columns. `auto` switches to grid when the number of groups exceeds `columns`. |
 | `columns` | `2` | Number of columns in grid mode (1–4). Also used as the threshold when `displayMode` is `auto`. |
 | `fontScale` | `1` | Multiplier for text size. `1.2` increases text by 20%. |
+| `textSize` | `null` | Override text size in pixels (e.g., `16` or `20`). When set, this overrides `fontScale`. |
 | `albumArtSize` | `80` | Album-art size in pixels. |
 | `wrapText` | `true` | Allow line wrapping. Set to `false` for single-line ellipsis. |
 | `maxTextLines` | `2` | Maximum lines for the title (only when `wrapText` is `true`). |
-| `textAlignment` | `'center'` | Text alignment: `'left'`, `'center'`, or `'right'`. |
+| `textAlignment` | `'center'` | Text alignment: `'left'`, `'center'`, or `'right'`. When set to `'left'`, text appears on the left with album art on the right (text is right-aligned to hug the album). When set to `'right'`, album art appears on the left with text on the right (text is left-aligned to hug the album). |
 | `justifyContent` | `'center'` | Horizontal distribution of cards: `'flex-start'`, `'center'`, `'space-between'`, etc. |
 | `moduleWidth` | `null` | Constrain module width (e.g. `"600px"`, `"80%"`). |
 | `forceHttps` | `false` | Force album art over HTTPS (useful when running behind an HTTPS reverse proxy). |
