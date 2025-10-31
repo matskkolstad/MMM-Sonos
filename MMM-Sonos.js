@@ -200,6 +200,8 @@ Module.register('MMM-Sonos', {
     container.style.gap = '0.45rem';
 
     // Apply layout based on textAlignment
+    // Note: The text-align values are intentionally opposite to the position
+    // to make text "hug" the album art for a cleaner look
     if (alignment === 'center') {
       // Vertical layout: album art on top, text below
       container.style.flexDirection = 'column';
@@ -207,13 +209,13 @@ Module.register('MMM-Sonos', {
       container.style.textAlign = 'center';
     } else if (alignment === 'left') {
       // Horizontal layout: text on left, album art on right
-      // Text should be right-aligned to hug the album art
+      // Text is right-aligned (towards the album) to hug it
       container.style.flexDirection = 'row-reverse';
       container.style.alignItems = 'center';
       container.style.textAlign = 'right';
     } else if (alignment === 'right') {
       // Horizontal layout: album art on left, text on right
-      // Text should be left-aligned to hug the album art
+      // Text is left-aligned (towards the album) to hug it
       container.style.flexDirection = 'row';
       container.style.alignItems = 'center';
       container.style.textAlign = 'left';
@@ -266,14 +268,14 @@ Module.register('MMM-Sonos', {
     content.style.gap = '0.3rem';
     content.style.width = '100%';
 
-    // Align content based on textAlignment
+    // Align content based on textAlignment (matches container's text-align)
     if (alignment === 'center') {
       content.style.alignItems = 'center';
     } else if (alignment === 'left') {
-      // Align text towards album art on the right
+      // Text on left: align items to flex-end (right) to hug album on the right
       content.style.alignItems = 'flex-end';
     } else if (alignment === 'right') {
-      // Align text towards album art on the left
+      // Text on right: align items to flex-start (left) to hug album on the left
       content.style.alignItems = 'flex-start';
     }
 
@@ -283,14 +285,14 @@ Module.register('MMM-Sonos', {
     header.style.flexDirection = 'column';
     header.style.gap = '0.25rem';
 
-    // Align header based on textAlignment
+    // Align header based on textAlignment (matches container's text-align)
     if (alignment === 'center') {
       header.style.alignItems = 'center';
     } else if (alignment === 'left') {
-      // Align header towards album art on the right
+      // Text on left: align items to flex-end (right) to hug album on the right
       header.style.alignItems = 'flex-end';
     } else if (alignment === 'right') {
-      // Align header towards album art on the left
+      // Text on right: align items to flex-start (left) to hug album on the left
       header.style.alignItems = 'flex-start';
     }
 
@@ -316,14 +318,14 @@ Module.register('MMM-Sonos', {
       titleWrapper.style.flexDirection = 'column';
       titleWrapper.style.gap = '0.08rem';
 
-      // Align track info based on textAlignment
+      // Align track info based on textAlignment (matches container's text-align)
       if (alignment === 'center') {
         titleWrapper.style.alignItems = 'center';
       } else if (alignment === 'left') {
-        // Align track info towards album art on the right
+        // Text on left: align items to flex-end (right) to hug album on the right
         titleWrapper.style.alignItems = 'flex-end';
       } else if (alignment === 'right') {
-        // Align track info towards album art on the left
+        // Text on right: align items to flex-start (left) to hug album on the left
         titleWrapper.style.alignItems = 'flex-start';
       }
 
