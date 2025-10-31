@@ -13,7 +13,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--mmm-sonos-gap);
-  font-size: calc(1rem * var(--mmm-sonos-font-scale));
+  font-size: var(--mmm-sonos-text-size, calc(1rem * var(--mmm-sonos-font-scale)));
   align-items: stretch;
   width: 100%;
 }

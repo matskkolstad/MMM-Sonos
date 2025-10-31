@@ -11,6 +11,7 @@ Module.register('MMM-Sonos', {
     displayMode: 'row', // auto | grid | row
     columns: 2,
     fontScale: 1,
+    textSize: null,
     albumArtSize: 80,
     wrapText: true,
     textAlignment: 'center',
@@ -98,7 +99,12 @@ Module.register('MMM-Sonos', {
   getDom() {
     const wrapper = document.createElement('div');
     wrapper.classList.add('mmm-sonos');
-    wrapper.style.setProperty('--mmm-sonos-font-scale', this.config.fontScale);
+    const textSizeValue = this._coercePixelValue(this.config.textSize, null);
+    if (textSizeValue) {
+      wrapper.style.setProperty('--mmm-sonos-text-size', textSizeValue);
+    } else {
+      wrapper.style.setProperty('--mmm-sonos-font-scale', this.config.fontScale);
+    }
     const albumSizeValue = this._coercePixelValue(this.config.albumArtSize, this.defaults.albumArtSize);
     if (albumSizeValue) {
       wrapper.style.setProperty('--mmm-sonos-album-size', albumSizeValue);
@@ -194,6 +200,8 @@ Module.register('MMM-Sonos', {
     container.style.gap = '0.45rem';
 
     // Apply layout based on textAlignment
+    // Note: The text-align values are intentionally opposite to the position
+    // to make text "hug" the album art for a cleaner look
     if (alignment === 'center') {
       // Vertical layout: album art on top, text below
       container.style.flexDirection = 'column';
@@ -201,14 +209,16 @@ Module.register('MMM-Sonos', {
       container.style.textAlign = 'center';
     } else if (alignment === 'left') {
       // Horizontal layout: text on left, album art on right
+      // Text is right-aligned (towards the album) to hug it
       container.style.flexDirection = 'row-reverse';
       container.style.alignItems = 'center';
-      container.style.textAlign = 'left';
+      container.style.textAlign = 'right';
     } else if (alignment === 'right') {
       // Horizontal layout: album art on left, text on right
+      // Text is left-aligned (towards the album) to hug it
       container.style.flexDirection = 'row';
       container.style.alignItems = 'center';
-      container.style.textAlign = 'right';
+      container.style.textAlign = 'left';
     }
 
     const cardWidth = Number(this.config.cardMinWidth);
@@ -258,13 +268,15 @@ Module.register('MMM-Sonos', {
     content.style.gap = '0.3rem';
     content.style.width = '100%';
 
-    // Align content based on textAlignment
+    // Align content based on textAlignment (matches container's text-align)
     if (alignment === 'center') {
       content.style.alignItems = 'center';
     } else if (alignment === 'left') {
-      content.style.alignItems = 'flex-start';
-    } else if (alignment === 'right') {
+      // Text on left: align items to flex-end (right) to hug album on the right
       content.style.alignItems = 'flex-end';
+    } else if (alignment === 'right') {
+      // Text on right: align items to flex-start (left) to hug album on the left
+      content.style.alignItems = 'flex-start';
     }
 
     const header = document.createElement('div');
@@ -273,13 +285,15 @@ Module.register('MMM-Sonos', {
     header.style.flexDirection = 'column';
     header.style.gap = '0.25rem';
 
-    // Align header based on textAlignment
+    // Align header based on textAlignment (matches container's text-align)
     if (alignment === 'center') {
       header.style.alignItems = 'center';
     } else if (alignment === 'left') {
-      header.style.alignItems = 'flex-start';
-    } else if (alignment === 'right') {
+      // Text on left: align items to flex-end (right) to hug album on the right
       header.style.alignItems = 'flex-end';
+    } else if (alignment === 'right') {
+      // Text on right: align items to flex-start (left) to hug album on the left
+      header.style.alignItems = 'flex-start';
     }
 
     const groupName = document.createElement('span');
@@ -304,13 +318,15 @@ Module.register('MMM-Sonos', {
       titleWrapper.style.flexDirection = 'column';
       titleWrapper.style.gap = '0.08rem';
 
-      // Align track info based on textAlignment
+      // Align track info based on textAlignment (matches container's text-align)
       if (alignment === 'center') {
         titleWrapper.style.alignItems = 'center';
       } else if (alignment === 'left') {
-        titleWrapper.style.alignItems = 'flex-start';
-      } else if (alignment === 'right') {
+        // Text on left: align items to flex-end (right) to hug album on the right
         titleWrapper.style.alignItems = 'flex-end';
+      } else if (alignment === 'right') {
+        // Text on right: align items to flex-start (left) to hug album on the left
+        titleWrapper.style.alignItems = 'flex-start';
       }
 
       const title = document.createElement('div');
