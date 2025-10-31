@@ -99,10 +99,11 @@ Module.register('MMM-Sonos', {
   getDom() {
     const wrapper = document.createElement('div');
     wrapper.classList.add('mmm-sonos');
-    wrapper.style.setProperty('--mmm-sonos-font-scale', this.config.fontScale);
     const textSizeValue = this._coercePixelValue(this.config.textSize, null);
     if (textSizeValue) {
-      wrapper.style.fontSize = textSizeValue;
+      wrapper.style.setProperty('--mmm-sonos-text-size', textSizeValue);
+    } else {
+      wrapper.style.setProperty('--mmm-sonos-font-scale', this.config.fontScale);
     }
     const albumSizeValue = this._coercePixelValue(this.config.albumArtSize, this.defaults.albumArtSize);
     if (albumSizeValue) {
@@ -269,10 +270,10 @@ Module.register('MMM-Sonos', {
     if (alignment === 'center') {
       content.style.alignItems = 'center';
     } else if (alignment === 'left') {
-      // When text is on left, align items to the right (towards album)
+      // Align text towards album art on the right
       content.style.alignItems = 'flex-end';
     } else if (alignment === 'right') {
-      // When text is on right, align items to the left (towards album)
+      // Align text towards album art on the left
       content.style.alignItems = 'flex-start';
     }
 
@@ -286,10 +287,10 @@ Module.register('MMM-Sonos', {
     if (alignment === 'center') {
       header.style.alignItems = 'center';
     } else if (alignment === 'left') {
-      // When text is on left, align items to the right (towards album)
+      // Align header towards album art on the right
       header.style.alignItems = 'flex-end';
     } else if (alignment === 'right') {
-      // When text is on right, align items to the left (towards album)
+      // Align header towards album art on the left
       header.style.alignItems = 'flex-start';
     }
 
@@ -319,10 +320,10 @@ Module.register('MMM-Sonos', {
       if (alignment === 'center') {
         titleWrapper.style.alignItems = 'center';
       } else if (alignment === 'left') {
-        // When text is on left, align items to the right (towards album)
+        // Align track info towards album art on the right
         titleWrapper.style.alignItems = 'flex-end';
       } else if (alignment === 'right') {
-        // When text is on right, align items to the left (towards album)
+        // Align track info towards album art on the left
         titleWrapper.style.alignItems = 'flex-start';
       }
 
