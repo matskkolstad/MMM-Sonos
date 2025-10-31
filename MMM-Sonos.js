@@ -443,9 +443,11 @@ Module.register('MMM-Sonos', {
   },
 
   _coercePixelValue(value, fallback) {
-    const numeric = Number(value);
-    if (!Number.isNaN(numeric) && Number.isFinite(numeric) && numeric >= 0) {
-      return `${numeric}px`;
+    if (value != null) {
+      const numeric = Number(value);
+      if (!Number.isNaN(numeric) && Number.isFinite(numeric) && numeric >= 0) {
+        return `${numeric}px`;
+      }
     }
 
     if (fallback == null) {
