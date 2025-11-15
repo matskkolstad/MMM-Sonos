@@ -86,7 +86,9 @@ Module.register('MMM-Sonos', {
   },
 
   getStyles() {
-    return ['MMM-Sonos.css'];
+    return [
+      this.file('css/MMM-Sonos.css')
+    ];
   },
 
   getTranslations() {
