@@ -4,7 +4,7 @@ A MagicMirror² module that automatically discovers your Sonos zones and shows w
 
 **Created by:** Mats Kjoshagen Kolstad
 
-![MMM-Sonos screenshot](docs/screenshot.png)
+![MMM-Sonos screenshot](docs/screenshot-2.png)
 
 ## Highlights
 
