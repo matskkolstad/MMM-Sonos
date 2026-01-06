@@ -44,7 +44,7 @@ I have thoroughly reviewed all 4 open pull requests in the repository. All PRs a
 - **Status**: ✅ Safe to merge
 - **Testing**: Passes all lint checks
 - **Security**: No vulnerabilities detected
-- **Changes**: Patch release fixing typos in example-line-in. Also upgrades internal dependencies:
+- **Changes**: Patch release fixing typos in example files. Also upgrades internal dependencies:
   - `axios` from ^0.21.1 to ^1.6.0
   - `xml2js` from ^0.4.23 to ^0.5.0
 - **Recommendation**: Safe to merge. Patch release with internal dependency updates that align with your existing package.json overrides.
@@ -81,7 +81,7 @@ The current master branch has 3 known vulnerabilities:
    - Affected: sonos dependency
    - Note: Your package.json already has an override for `ip@^2.0.1`
    
-2. **js-yaml** (Moderate severity): Prototype pollution in merge (<<)
+2. **js-yaml** (Moderate severity): Prototype pollution in merge (`<<` operator)
    - Can be fixed with `npm audit fix`
 
 These vulnerabilities exist on the master branch and are not introduced by any of the PRs.
@@ -114,9 +114,9 @@ All PRs:
 
 ### Post-Merge Actions
 After merging all PRs, consider:
-1. Running `npm audit fix` to address the js-yaml vulnerability
-2. Verifying your npm overrides for ip, axios, and xml2js are still effective
-3. Testing the module in your MagicMirror² environment to ensure functionality
+1. Running `npm audit fix` to address the js-yaml vulnerability.
+2. Verifying your npm overrides for ip, axios, and xml2js are still effective.
+3. Testing the module in your MagicMirror² environment to ensure functionality.
 
 ---
 
