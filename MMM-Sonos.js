@@ -48,16 +48,22 @@ Module.register('MMM-Sonos', {
     this.error = null;
     this.lastUpdated = null;
     this.updateTimer = null;
+    this.progressAnimationTimer = null;
 
   this._log('Starting MMM-Sonos module');
     this.sendSocketNotification('SONOS_CONFIG', this.config);
     this.scheduleRefresh();
+    this._startProgressAnimation();
   },
 
   stop() {
     if (this.updateTimer) {
       clearInterval(this.updateTimer);
       this.updateTimer = null;
+    }
+    if (this.progressAnimationTimer) {
+      clearInterval(this.progressAnimationTimer);
+      this.progressAnimationTimer = null;
     }
   },
 
@@ -647,29 +653,20 @@ Module.register('MMM-Sonos', {
       container.style.alignSelf = 'flex-start';
     }
 
-    const icon = document.createElement('span');
-    icon.className = 'mmm-sonos__playback-source-icon';
+    const label = document.createElement('span');
+    label.className = 'mmm-sonos__playback-source-label';
 
     const sourceLower = source.toLowerCase();
     if (sourceLower.includes('spotify')) {
-      icon.innerText = '🎵';
-      icon.title = this.translate('SOURCE_SPOTIFY');
+      label.innerText = this.translate('SOURCE_SPOTIFY');
     } else if (sourceLower.includes('radio') || sourceLower.includes('stream')) {
-      icon.innerText = '📻';
-      icon.title = this.translate('SOURCE_RADIO');
+      label.innerText = this.translate('SOURCE_RADIO');
     } else if (sourceLower.includes('line') || sourceLower.includes('linein')) {
-      icon.innerText = '🔌';
-      icon.title = this.translate('SOURCE_LINE_IN');
+      label.innerText = this.translate('SOURCE_LINE_IN');
     } else {
-      icon.innerText = '♪';
-      icon.title = this.translate('SOURCE_UNKNOWN');
+      label.innerText = this.translate('SOURCE_UNKNOWN');
     }
 
-    container.appendChild(icon);
-
-    const label = document.createElement('span');
-    label.className = 'mmm-sonos__playback-source-label';
-    label.innerText = icon.title;
     container.appendChild(label);
 
     return container;
@@ -700,6 +697,12 @@ Module.register('MMM-Sonos', {
     const bar = document.createElement('div');
     bar.className = 'mmm-sonos__progress-bar';
 
+    // Store the initial position, duration, and timestamp for smooth animation
+    // Use lastUpdated timestamp for consistency with when data was actually received
+    bar.dataset.initialPosition = position;
+    bar.dataset.duration = duration;
+    bar.dataset.timestamp = this.lastUpdated || Date.now();
+
     const percentage = Math.min(100, Math.max(0, (position / duration) * 100));
     bar.style.width = `${percentage}%`;
 
@@ -708,6 +711,9 @@ Module.register('MMM-Sonos', {
 
     const timeInfo = document.createElement('div');
     timeInfo.className = 'mmm-sonos__progress-time';
+    timeInfo.dataset.initialPosition = position;
+    timeInfo.dataset.duration = duration;
+    timeInfo.dataset.timestamp = this.lastUpdated || Date.now();
     timeInfo.innerText = `${this._formatTime(position)} / ${this._formatTime(duration)}`;
     container.appendChild(timeInfo);
 
@@ -733,25 +739,9 @@ Module.register('MMM-Sonos', {
       container.style.alignSelf = 'flex-start';
     }
 
-    const icon = document.createElement('span');
-    icon.className = 'mmm-sonos__volume-icon';
-    
-    // Choose icon based on volume level
-    if (volume === 0) {
-      icon.innerText = '🔇';
-    } else if (volume < 33) {
-      icon.innerText = '🔈';
-    } else if (volume < 66) {
-      icon.innerText = '🔉';
-    } else {
-      icon.innerText = '🔊';
-    }
-
-    container.appendChild(icon);
-
     const label = document.createElement('span');
     label.className = 'mmm-sonos__volume-label';
-    label.innerText = `${volume}%`;
+    label.innerText = `${this.translate('VOLUME')}: ${volume}%`;
     container.appendChild(label);
 
     return container;
@@ -787,5 +777,71 @@ Module.register('MMM-Sonos', {
       return this.file(candidate);
     }
     return this.file('assets/tv-default.svg');
+  },
+
+  _startProgressAnimation() {
+    // Only start the animation timer if progress display is enabled
+    if (!this.config.showProgress) {
+      return;
+    }
+
+    // Update progress bars every second for smooth animation
+    if (this.progressAnimationTimer) {
+      clearInterval(this.progressAnimationTimer);
+    }
+    
+    this.progressAnimationTimer = setInterval(() => {
+      this._updateProgressBars();
+    }, 1000);
+  },
+
+  _updateProgressBars() {
+    if (!this.config.showProgress) {
+      return;
+    }
+
+    // Find all progress bars in the DOM
+    const progressBars = document.querySelectorAll('.mmm-sonos__progress-bar');
+    const timeDisplays = document.querySelectorAll('.mmm-sonos__progress-time');
+
+    // If no progress bars exist, no need to continue
+    if (progressBars.length === 0) {
+      return;
+    }
+
+    progressBars.forEach((bar) => {
+      const progressData = this._parseProgressData(bar.dataset);
+      if (!progressData) {
+        return;
+      }
+
+      const percentage = Math.min(100, Math.max(0, (progressData.currentPosition / progressData.duration) * 100));
+      bar.style.width = `${percentage}%`;
+    });
+
+    timeDisplays.forEach((timeInfo) => {
+      const progressData = this._parseProgressData(timeInfo.dataset);
+      if (!progressData) {
+        return;
+      }
+
+      timeInfo.innerText = `${this._formatTime(progressData.currentPosition)} / ${this._formatTime(progressData.duration)}`;
+    });
+  },
+
+  _parseProgressData(dataset) {
+    const initialPosition = parseFloat(dataset.initialPosition);
+    const duration = parseFloat(dataset.duration);
+    const timestamp = parseFloat(dataset.timestamp);
+
+    if (isNaN(initialPosition) || isNaN(duration) || isNaN(timestamp) || duration <= 0) {
+      return null;
+    }
+
+    // Calculate elapsed time since the last update
+    const elapsed = (Date.now() - timestamp) / 1000;
+    const currentPosition = Math.min(duration, initialPosition + elapsed);
+
+    return { initialPosition, duration, timestamp, elapsed, currentPosition };
   }
 });
