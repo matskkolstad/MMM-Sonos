@@ -698,9 +698,10 @@ Module.register('MMM-Sonos', {
     bar.className = 'mmm-sonos__progress-bar';
 
     // Store the initial position, duration, and timestamp for smooth animation
+    // Use lastUpdated timestamp for consistency with when data was actually received
     bar.dataset.initialPosition = position;
     bar.dataset.duration = duration;
-    bar.dataset.timestamp = Date.now();
+    bar.dataset.timestamp = this.lastUpdated || Date.now();
 
     const percentage = Math.min(100, Math.max(0, (position / duration) * 100));
     bar.style.width = `${percentage}%`;
@@ -712,7 +713,7 @@ Module.register('MMM-Sonos', {
     timeInfo.className = 'mmm-sonos__progress-time';
     timeInfo.dataset.initialPosition = position;
     timeInfo.dataset.duration = duration;
-    timeInfo.dataset.timestamp = Date.now();
+    timeInfo.dataset.timestamp = this.lastUpdated || Date.now();
     timeInfo.innerText = `${this._formatTime(position)} / ${this._formatTime(duration)}`;
     container.appendChild(timeInfo);
 
