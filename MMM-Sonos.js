@@ -37,6 +37,9 @@ Module.register('MMM-Sonos', {
     tvIconText: 'TV',
     tvIconSvgPath: null,
     tvLabel: null,
+    showPlaybackSource: true,
+    showProgress: true,
+    showVolume: true,
     debug: false
   },
 
@@ -427,6 +430,30 @@ Module.register('MMM-Sonos', {
       content.appendChild(titleWrapper);
     }
 
+    // Playback source indicator
+    if (this.config.showPlaybackSource && group.source && !isTvSource) {
+      const sourceElement = this._renderPlaybackSource(group.source, alignment);
+      if (sourceElement) {
+        content.appendChild(sourceElement);
+      }
+    }
+
+    // Progress indicator
+    if (this.config.showProgress && group.position != null && group.duration != null && group.duration > 0) {
+      const progressElement = this._renderProgress(group.position, group.duration, alignment);
+      if (progressElement) {
+        content.appendChild(progressElement);
+      }
+    }
+
+    // Volume display
+    if (this.config.showVolume && group.volume != null) {
+      const volumeElement = this._renderVolume(group.volume, alignment);
+      if (volumeElement) {
+        content.appendChild(volumeElement);
+      }
+    }
+
     if (this.config.showGroupMembers && group.members && group.members.length > 1) {
       const members = document.createElement('div');
       members.className = 'mmm-sonos__members';
@@ -599,6 +626,150 @@ Module.register('MMM-Sonos', {
     container.appendChild(label);
 
     return container;
+  },
+
+  _renderPlaybackSource(source, alignment) {
+    if (!source) {
+      return null;
+    }
+
+    const container = document.createElement('div');
+    container.className = 'mmm-sonos__playback-source';
+
+    if (alignment === 'center') {
+      container.style.justifyContent = 'center';
+      container.style.alignSelf = 'center';
+    } else if (alignment === 'left') {
+      container.style.justifyContent = 'flex-end';
+      container.style.alignSelf = 'flex-end';
+    } else {
+      container.style.justifyContent = 'flex-start';
+      container.style.alignSelf = 'flex-start';
+    }
+
+    const icon = document.createElement('span');
+    icon.className = 'mmm-sonos__playback-source-icon';
+
+    const sourceLower = source.toLowerCase();
+    if (sourceLower.includes('spotify')) {
+      icon.innerText = '🎵';
+      icon.title = this.translate('SOURCE_SPOTIFY');
+    } else if (sourceLower.includes('radio') || sourceLower.includes('stream')) {
+      icon.innerText = '📻';
+      icon.title = this.translate('SOURCE_RADIO');
+    } else if (sourceLower.includes('line') || sourceLower.includes('linein')) {
+      icon.innerText = '🔌';
+      icon.title = this.translate('SOURCE_LINE_IN');
+    } else {
+      icon.innerText = '♪';
+      icon.title = this.translate('SOURCE_UNKNOWN');
+    }
+
+    container.appendChild(icon);
+
+    const label = document.createElement('span');
+    label.className = 'mmm-sonos__playback-source-label';
+    label.innerText = icon.title;
+    container.appendChild(label);
+
+    return container;
+  },
+
+  _renderProgress(position, duration, alignment) {
+    if (position == null || duration == null || duration <= 0) {
+      return null;
+    }
+
+    const container = document.createElement('div');
+    container.className = 'mmm-sonos__progress';
+
+    if (alignment === 'center') {
+      container.style.alignItems = 'center';
+      container.style.alignSelf = 'center';
+    } else if (alignment === 'left') {
+      container.style.alignItems = 'flex-end';
+      container.style.alignSelf = 'flex-end';
+    } else {
+      container.style.alignItems = 'flex-start';
+      container.style.alignSelf = 'flex-start';
+    }
+
+    const barWrapper = document.createElement('div');
+    barWrapper.className = 'mmm-sonos__progress-bar-wrapper';
+
+    const bar = document.createElement('div');
+    bar.className = 'mmm-sonos__progress-bar';
+
+    const percentage = Math.min(100, Math.max(0, (position / duration) * 100));
+    bar.style.width = `${percentage}%`;
+
+    barWrapper.appendChild(bar);
+    container.appendChild(barWrapper);
+
+    const timeInfo = document.createElement('div');
+    timeInfo.className = 'mmm-sonos__progress-time';
+    timeInfo.innerText = `${this._formatTime(position)} / ${this._formatTime(duration)}`;
+    container.appendChild(timeInfo);
+
+    return container;
+  },
+
+  _renderVolume(volume, alignment) {
+    if (volume == null) {
+      return null;
+    }
+
+    const container = document.createElement('div');
+    container.className = 'mmm-sonos__volume';
+
+    if (alignment === 'center') {
+      container.style.justifyContent = 'center';
+      container.style.alignSelf = 'center';
+    } else if (alignment === 'left') {
+      container.style.justifyContent = 'flex-end';
+      container.style.alignSelf = 'flex-end';
+    } else {
+      container.style.justifyContent = 'flex-start';
+      container.style.alignSelf = 'flex-start';
+    }
+
+    const icon = document.createElement('span');
+    icon.className = 'mmm-sonos__volume-icon';
+    
+    // Choose icon based on volume level
+    if (volume === 0) {
+      icon.innerText = '🔇';
+    } else if (volume < 33) {
+      icon.innerText = '🔈';
+    } else if (volume < 66) {
+      icon.innerText = '🔉';
+    } else {
+      icon.innerText = '🔊';
+    }
+
+    container.appendChild(icon);
+
+    const label = document.createElement('span');
+    label.className = 'mmm-sonos__volume-label';
+    label.innerText = `${volume}%`;
+    container.appendChild(label);
+
+    return container;
+  },
+
+  _formatTime(seconds) {
+    if (seconds == null || isNaN(seconds)) {
+      return '0:00';
+    }
+
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
   },
 
   _isTvSource(group) {

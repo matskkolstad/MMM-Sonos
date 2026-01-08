@@ -10,3 +10,4 @@ pnpm-debug.log*
 .env.*
 dist/
 coverage/
+test-demo.html

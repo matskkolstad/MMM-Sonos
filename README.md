@@ -10,6 +10,9 @@ A MagicMirror² module that automatically discovers your Sonos zones and shows w
 
 - 🔍 Automatic Sonos discovery – no manual IP configuration required.
 - 🎵 Displays the current track with title, artist, album, and album art.
+- 🎶 **NEW**: Shows playback source icons (Spotify, Radio, Line-in) for easy identification.
+- 📊 **NEW**: Progress indicator with visual bar and time counter for track playback.
+- 🔊 **NEW**: Volume display with dynamic icons showing current volume level.
 - 🧩 Groups are presented as a single unit (no duplicate speakers when they’re grouped).
 - 🙈 Hide specific speakers or groups directly from the configuration.
 - 🧱 Flexible layouts: row, grid, or automatic based on the number of groups.
@@ -127,6 +130,11 @@ An example showing all available configuration options:
     showAlbum: false,                // Show album name under artist
     accentuateActive: true,          // Highlight actively playing groups
     
+    // New features
+    showPlaybackSource: true,        // Show playback source icon (Spotify, Radio, Line-in, etc.)
+    showProgress: true,              // Show progress bar and time for current track
+    showVolume: true,                // Show volume level for each speaker/group
+    
     // TV source configuration
     showTvSource: true,              // Show TV badge when TV input is active
     showTvIcon: true,                // Display TV icon in album art slot
@@ -186,6 +194,9 @@ Restart MagicMirror² afterwards to load the latest code.
 | `accentuateActive` | `true` | Highlight actively playing groups with a stronger background. |
 | `showAlbum` | `false` | Display album title under the artist when available. |
 | `cardMinWidth` | `150` | Minimum width for each card, used to adapt row/grid layouts. |
+| `showPlaybackSource` | `true` | Display the playback source icon and label (Spotify, Radio, Line-in, etc.). Icons automatically adjust based on the source. |
+| `showProgress` | `true` | Show a progress bar and time counter for the current track. Only displayed when track position and duration information is available. |
+| `showVolume` | `true` | Display the current volume level with an icon that changes based on volume (muted, low, medium, high). |
 | `showTvSource` | `true` | Show a TV badge when a home-theater input (TV) is active. |
 | `showTvIcon` | `true` | Display a TV icon in the album-art slot when TV is active. Set to `false` to keep the placeholder without the icon. |
 | `tvIconMode` | `'emoji'` | Choose the TV icon type: `'emoji'` (default), `'text'`, or `'svg'`. |
@@ -266,8 +277,8 @@ This module uses dependency overrides to mitigate known security vulnerabilities
 Some ideas for future improvements:
 
 - Add volume control through touch or remote notifications.
-- Show the playback source (Spotify, Radio, Line-in) with an icon.
-- Include a simple progress indicator for the current track.
+- ~~Show the playback source (Spotify, Radio, Line-in) with an icon.~~ ✅ **Completed**
+- ~~Include a simple progress indicator for the current track.~~ ✅ **Completed**
 - Cache album art locally for faster loading on slower networks.
 
 ## License

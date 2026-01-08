@@ -262,6 +262,27 @@ module.exports = NodeHelper.create({
 
         const albumArt = this._normalizeArt(track?.albumArtURL || track?.absoluteAlbumArtURI, coordinator);
 
+        // Get volume and position information
+        let volume = null;
+        let position = null;
+        let duration = null;
+
+        try {
+          volume = await coordinator.getVolume();
+        } catch (error) {
+          this.sendDebug('Failed to fetch volume', name || id, error?.message || error);
+        }
+
+        try {
+          const positionInfo = await coordinator.avTransportService().GetPositionInfo();
+          if (positionInfo && !isTvSource) {
+            position = this._parseTimeToSeconds(positionInfo.RelTime);
+            duration = this._parseTimeToSeconds(positionInfo.TrackDuration);
+          }
+        } catch (error) {
+          this.sendDebug('Failed to fetch position info', name || id, error?.message || error);
+        }
+
         const coordinatorName = await this._inferCoordinatorName(coordinator);
         formatted.push({
           id: id || coordinator.uuid || coordinator.host,
@@ -273,6 +294,9 @@ module.exports = NodeHelper.create({
           albumArt,
           source,
           isTvSource,
+          volume,
+          position,
+          duration,
           members: members.length ? members : [coordinatorName || name || 'Sonos']
         });
       } catch (error) {
@@ -411,6 +435,32 @@ module.exports = NodeHelper.create({
     }
 
     return false;
+  },
+
+  _parseTimeToSeconds(timeString) {
+    if (!timeString || typeof timeString !== 'string') {
+      return null;
+    }
+
+    // Handle special values like "NOT_IMPLEMENTED"
+    if (timeString === 'NOT_IMPLEMENTED' || timeString === '0:00:00') {
+      return null;
+    }
+
+    const parts = timeString.split(':');
+    if (parts.length !== 3) {
+      return null;
+    }
+
+    const hours = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[1], 10);
+    const seconds = parseInt(parts[2], 10);
+
+    if (isNaN(hours) || isNaN(minutes) || isNaN(seconds)) {
+      return null;
+    }
+
+    return hours * 3600 + minutes * 60 + seconds;
   },
 
   _pick(source, keys) {

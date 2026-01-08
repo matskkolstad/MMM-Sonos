@@ -195,6 +195,73 @@
   text-transform: uppercase;
 }
 
+.mmm-sonos__playback-source {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72em;
+  opacity: 0.75;
+  padding: 0.15rem 0;
+}
+
+.mmm-sonos__playback-source-icon {
+  font-size: 1.15em;
+  line-height: 1;
+}
+
+.mmm-sonos__playback-source-label {
+  letter-spacing: 0.02em;
+}
+
+.mmm-sonos__progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0.15rem 0;
+}
+
+.mmm-sonos__progress-bar-wrapper {
+  width: 100%;
+  max-width: 200px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.mmm-sonos__progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.8));
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.mmm-sonos__progress-time {
+  font-size: 0.65em;
+  opacity: 0.6;
+  letter-spacing: 0.02em;
+}
+
+.mmm-sonos__volume {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.7em;
+  opacity: 0.7;
+  padding: 0.15rem 0;
+}
+
+.mmm-sonos__volume-icon {
+  font-size: 1.15em;
+  line-height: 1;
+}
+
+.mmm-sonos__volume-label {
+  letter-spacing: 0.02em;
+  font-weight: 500;
+}
+
 .mmm-sonos__empty {
   font-size: 0.9em;
   opacity: 0.6;
