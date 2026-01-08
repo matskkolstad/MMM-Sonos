@@ -635,11 +635,6 @@ Module.register('MMM-Sonos', {
 
     const container = document.createElement('div');
     container.className = 'mmm-sonos__playback-source';
-    container.style.display = 'flex';
-    container.style.alignItems = 'center';
-    container.style.gap = '0.35rem';
-    container.style.fontSize = '0.72em';
-    container.style.opacity = '0.75';
 
     if (alignment === 'center') {
       container.style.justifyContent = 'center';
@@ -687,10 +682,6 @@ Module.register('MMM-Sonos', {
 
     const container = document.createElement('div');
     container.className = 'mmm-sonos__progress';
-    container.style.display = 'flex';
-    container.style.flexDirection = 'column';
-    container.style.gap = '0.25rem';
-    container.style.width = '100%';
 
     if (alignment === 'center') {
       container.style.alignItems = 'center';
@@ -705,19 +696,9 @@ Module.register('MMM-Sonos', {
 
     const barWrapper = document.createElement('div');
     barWrapper.className = 'mmm-sonos__progress-bar-wrapper';
-    barWrapper.style.width = '100%';
-    barWrapper.style.maxWidth = '200px';
-    barWrapper.style.height = '4px';
-    barWrapper.style.background = 'rgba(255, 255, 255, 0.2)';
-    barWrapper.style.borderRadius = '2px';
-    barWrapper.style.overflow = 'hidden';
 
     const bar = document.createElement('div');
     bar.className = 'mmm-sonos__progress-bar';
-    bar.style.height = '100%';
-    bar.style.background = 'rgba(255, 255, 255, 0.7)';
-    bar.style.borderRadius = '2px';
-    bar.style.transition = 'width 0.3s ease';
 
     const percentage = Math.min(100, Math.max(0, (position / duration) * 100));
     bar.style.width = `${percentage}%`;
@@ -727,8 +708,6 @@ Module.register('MMM-Sonos', {
 
     const timeInfo = document.createElement('div');
     timeInfo.className = 'mmm-sonos__progress-time';
-    timeInfo.style.fontSize = '0.65em';
-    timeInfo.style.opacity = '0.6';
     timeInfo.innerText = `${this._formatTime(position)} / ${this._formatTime(duration)}`;
     container.appendChild(timeInfo);
 
@@ -742,11 +721,6 @@ Module.register('MMM-Sonos', {
 
     const container = document.createElement('div');
     container.className = 'mmm-sonos__volume';
-    container.style.display = 'flex';
-    container.style.alignItems = 'center';
-    container.style.gap = '0.35rem';
-    container.style.fontSize = '0.7em';
-    container.style.opacity = '0.7';
 
     if (alignment === 'center') {
       container.style.justifyContent = 'center';
