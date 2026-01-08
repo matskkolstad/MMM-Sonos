@@ -798,6 +798,11 @@ Module.register('MMM-Sonos', {
     const progressBars = document.querySelectorAll('.mmm-sonos__progress-bar');
     const timeDisplays = document.querySelectorAll('.mmm-sonos__progress-time');
 
+    // If no progress bars exist, no need to continue
+    if (progressBars.length === 0) {
+      return;
+    }
+
     progressBars.forEach((bar) => {
       const initialPosition = parseFloat(bar.dataset.initialPosition);
       const duration = parseFloat(bar.dataset.duration);
