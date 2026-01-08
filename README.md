@@ -39,48 +39,105 @@ This module was produced with assistance from AI tools and was originally create
    npm install
    ```
 
-3. Add the module to `config/config.js`:
-
-   ```javascript
-   {
-     module: 'MMM-Sonos',
-     position: 'bottom_left',
-     config: {
-       updateInterval: 15000,
-       displayMode: 'row',
-       columns: 2,
-       albumArtSize: 80,
-       fontScale: 1,
-       hiddenSpeakers: ['Bathroom'],
-       hiddenGroups: ['Patio'],
-       knownDevices: ['192.168.68.55', '192.168.68.63', '192.168.68.75'],
-       showAlbum: false,
-       showGroupMembers: true,
-       hideWhenNothingPlaying: true,
-       showWhenPaused: false,
-       showPlaybackState: false,
-       showLastUpdated: false,
-   cardMinWidth: 150,
-     }
-   }
-   ```
+3. Add the module to `config/config.js`. See [Configuration Examples](#configuration-examples) below for different setup options.
 
 4. Start (or restart) MagicMirror². The module appears once the first Sonos group is discovered.
 
-### Example with New Features
+## Configuration Examples
 
-To use the new text alignment and size features:
+### Minimal Configuration
+
+The simplest setup requires no configuration at all – just add the module and it will work with default settings:
 
 ```javascript
 {
   module: 'MMM-Sonos',
-  position: 'bottom_right',
+  position: 'bottom_left'
+}
+```
+
+### Common Configuration
+
+A typical setup with the most commonly used options:
+
+```javascript
+{
+  module: 'MMM-Sonos',
+  position: 'bottom_left',
   config: {
-    textAlignment: 'right',  // Album on left, text on right (left-aligned)
-    textSize: 18,            // Override text size to 18px
-    albumArtSize: 100,       // Larger album art
-    displayMode: 'grid',
-    columns: 2
+    updateInterval: 15000,           // Update every 15 seconds
+    displayMode: 'row',              // Display groups in a horizontal row
+    albumArtSize: 80,                // Album art size in pixels
+    hideWhenNothingPlaying: true,    // Hide module when nothing is playing
+    showGroupMembers: true,          // Show which rooms are in each group
+    hiddenSpeakers: ['Bathroom'],    // Hide specific speakers
+    knownDevices: ['192.168.1.50']   // Optional: specify device IPs if auto-discovery fails
+  }
+}
+```
+
+### Complete Configuration
+
+An example showing all available configuration options:
+
+```javascript
+{
+  module: 'MMM-Sonos',
+  position: 'bottom_left',
+  config: {
+    // Discovery and updates
+    updateInterval: 15000,           // Polling interval in milliseconds (minimum: 5000)
+    discoveryTimeout: 5000,          // Time to wait for device discovery (0 to skip auto-discovery)
+    knownDevices: [],                // Array of static Sonos IPs for fallback
+    
+    // Display mode and layout
+    displayMode: 'row',              // 'row', 'grid', or 'auto'
+    columns: 2,                      // Number of columns in grid mode (1-4)
+    maxGroups: 6,                    // Maximum groups to display
+    moduleWidth: null,               // Constrain width (e.g., "600px" or "80%")
+    
+    // Text styling
+    fontScale: 1,                    // Text size multiplier (e.g., 1.2 = 20% larger)
+    textSize: null,                  // Override text size in pixels (overrides fontScale)
+    textAlignment: 'center',         // 'left', 'center', or 'right'
+    wrapText: true,                  // Allow text wrapping
+    maxTextLines: 2,                 // Max lines for title when wrapping is enabled
+    
+    // Album art
+    albumArtSize: 80,                // Album art size in pixels
+    forceHttps: false,               // Force HTTPS for album art URLs
+    
+    // Card layout
+    cardMinWidth: 150,               // Minimum card width in pixels
+    justifyContent: 'center',        // Horizontal distribution: 'flex-start', 'center', 'space-between', etc.
+    
+    // Visibility and filtering
+    hideWhenNothingPlaying: true,    // Hide module when nothing is playing
+    showWhenPaused: false,           // Show groups even when paused
+    fadePausedGroups: true,          // Dim groups that aren't playing
+    hiddenSpeakers: [],              // Array of speaker/room names to hide
+    hiddenGroups: [],                // Array of group names or IDs to hide
+    
+    // Information display
+    showGroupMembers: true,          // Show which rooms are in each group
+    showPlaybackState: false,        // Show playback state label (Playing, Paused, etc.)
+    showLastUpdated: false,          // Show timestamp of last update
+    timeFormat24: true,              // Use 24-hour time format
+    dateLocale: 'en-US',             // Locale for timestamp formatting
+    showAlbum: false,                // Show album name under artist
+    accentuateActive: true,          // Highlight actively playing groups
+    
+    // TV source configuration
+    showTvSource: true,              // Show TV badge when TV input is active
+    showTvIcon: true,                // Display TV icon in album art slot
+    tvIconMode: 'emoji',             // 'emoji', 'text', or 'svg'
+    tvIcon: '📺',                    // Emoji to use when tvIconMode is 'emoji'
+    tvIconText: 'TV',                // Text to use when tvIconMode is 'text'
+    tvIconSvgPath: null,             // Path/URL to SVG when tvIconMode is 'svg' (defaults to bundled asset)
+    tvLabel: null,                   // Override TV badge text (defaults to translated "TV")
+    
+    // Debugging
+    debug: false                     // Enable detailed logging
   }
 }
 ```
@@ -151,6 +208,31 @@ Restart MagicMirror² afterwards to load the latest code.
 - **HTTPS-friendly album art:** Set `forceHttps: true` when your mirror runs behind an HTTPS proxy and browsers block mixed content.
 - **Responsive layout:** The row and grid layouts adapt to smaller displays and switch orientation whenever needed.
 - **Snappy updates:** Polling combined with caching keeps the UI fresh without noticeable lag.
+
+## Module Structure
+
+The module consists of the following files:
+
+### Core Files
+- **`MMM-Sonos.js`** - Main module file handling the UI and frontend logic
+- **`node_helper.js`** - Backend helper that communicates with Sonos devices
+- **`package.json`** - Node.js dependencies and metadata
+
+### Styling
+- **`css/MMM-Sonos.css`** - All module styles including layout modes, animations, and themes
+
+### Translations
+The module includes multilingual support:
+- **`translations/en.json`** - English translations
+- **`translations/nb.json`** - Norwegian Bokmål translations
+
+Supported translation keys include error messages, playback states, and UI labels. Add your own language by creating a new JSON file in the `translations` folder and adding it to the `getTranslations()` method in `MMM-Sonos.js`.
+
+### Assets
+- **`assets/tv-default.svg`** - Default TV icon for home theater sources
+- **`assets/tv.svg`** - Alternative TV icon
+
+You can add custom TV icons by placing SVG files in the `assets` folder and referencing them with the `tvIconSvgPath` configuration option.
 
 ## Development
 
