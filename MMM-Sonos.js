@@ -30,6 +30,13 @@ Module.register('MMM-Sonos', {
     accentuateActive: true,
     showAlbum: false,
     cardMinWidth: 150,
+    showTvSource: true,
+    showTvIcon: true,
+    tvIcon: '📺',
+    tvIconMode: 'emoji', // 'emoji' | 'text' | 'svg'
+    tvIconText: 'TV',
+    tvIconSvgPath: null,
+    tvLabel: null,
     debug: false
   },
 
@@ -192,6 +199,8 @@ Module.register('MMM-Sonos', {
       return null;
     }
 
+    const isTvSource = this._isTvSource(group);
+
     // Determine alignment once for the entire group
     const alignment = this.config.textAlignment || 'center';
 
@@ -238,14 +247,14 @@ Module.register('MMM-Sonos', {
       container.classList.add('mmm-sonos__group--paused');
     }
 
-    // Album art
+    // Album art (or TV icon placeholder)
+    const configuredSize = Number(this.config.albumArtSize);
+    const sizeValue = !Number.isNaN(configuredSize) && configuredSize > 0 ? `${configuredSize}px` : null;
+    const iconFontSize = !Number.isNaN(configuredSize) && configuredSize > 0 ? `${Math.round(configuredSize * 0.42)}px` : null;
     if (group.albumArt) {
       const artWrapper = document.createElement('div');
       artWrapper.className = 'mmm-sonos__art';
-
-      const configuredSize = Number(this.config.albumArtSize);
-      if (!Number.isNaN(configuredSize) && configuredSize > 0) {
-        const sizeValue = `${configuredSize}px`;
+      if (sizeValue) {
         artWrapper.style.width = sizeValue;
         artWrapper.style.height = sizeValue;
       }
@@ -254,12 +263,66 @@ Module.register('MMM-Sonos', {
       img.loading = 'lazy';
       img.src = group.albumArt;
       img.alt = `${group.title || ''}`.trim() || 'Album art';
-      if (!Number.isNaN(configuredSize) && configuredSize > 0) {
-        const sizeValue = `${configuredSize}px`;
+      if (sizeValue) {
         img.style.width = sizeValue;
         img.style.height = sizeValue;
       }
       artWrapper.appendChild(img);
+      container.appendChild(artWrapper);
+    } else if (isTvSource) {
+      const artWrapper = document.createElement('div');
+      artWrapper.className = 'mmm-sonos__art mmm-sonos__art--tv';
+      if (sizeValue) {
+        artWrapper.style.width = sizeValue;
+        artWrapper.style.height = sizeValue;
+      }
+
+      // Respect showTvIcon: keep the placeholder to preserve layout, but hide the icon if disabled
+      if (this.config.showTvIcon !== false) {
+        const mode = (this.config.tvIconMode || 'emoji').toLowerCase();
+
+        if (mode === 'text') {
+          const icon = document.createElement('span');
+          icon.className = 'mmm-sonos__source-icon mmm-sonos__source-icon--text';
+          icon.innerText = this.config.tvIconText || 'TV';
+          icon.style.display = 'flex';
+          icon.style.alignItems = 'center';
+          icon.style.justifyContent = 'center';
+          icon.style.width = sizeValue || '100%';
+          icon.style.height = sizeValue || '100%';
+          icon.style.fontWeight = '700';
+          if (iconFontSize) {
+            icon.style.fontSize = iconFontSize;
+            icon.style.lineHeight = iconFontSize;
+          }
+          artWrapper.appendChild(icon);
+        } else if (mode === 'svg') {
+          const img = document.createElement('img');
+          img.className = 'mmm-sonos__source-icon mmm-sonos__source-icon--svg';
+          img.src = this._resolveTvSvgSource();
+          img.alt = 'TV Icon';
+          img.style.width = '100%';
+          img.style.height = '100%';
+          img.style.objectFit = 'contain';
+          artWrapper.appendChild(img);
+        } else {
+          // emoji (default)
+          const icon = document.createElement('span');
+          icon.className = 'mmm-sonos__source-icon';
+          icon.innerText = this.config.tvIcon || '📺';
+          icon.style.display = 'flex';
+          icon.style.alignItems = 'center';
+          icon.style.justifyContent = 'center';
+          icon.style.width = sizeValue || '100%';
+          icon.style.height = sizeValue || '100%';
+          if (iconFontSize) {
+            icon.style.fontSize = iconFontSize;
+            icon.style.lineHeight = iconFontSize;
+          }
+          artWrapper.appendChild(icon);
+        }
+      }
+
       container.appendChild(artWrapper);
     }
 
@@ -313,7 +376,15 @@ Module.register('MMM-Sonos', {
 
     content.appendChild(header);
 
-    if (group.title || group.artist) {
+    const sourceElement = isTvSource ? this._renderSourceLabel(alignment) : null;
+    if (sourceElement) {
+      content.appendChild(sourceElement);
+    }
+
+    const hasTrackInfo = group.title || group.artist;
+    const titleIsDuplicateTv = isTvSource && (!group.artist) && typeof group.title === 'string' && group.title.trim().toLowerCase() === 'tv';
+
+    if (hasTrackInfo && !titleIsDuplicateTv) {
       const titleWrapper = document.createElement('div');
       titleWrapper.className = 'mmm-sonos__track';
       titleWrapper.style.display = 'flex';
@@ -494,5 +565,56 @@ Module.register('MMM-Sonos', {
     if (this.config.debug) {
       console.log('[MMM-Sonos]', ...args);
     }
+  },
+
+  _renderSourceLabel(alignment) {
+    if (!this.config.showTvSource) {
+      return null;
+    }
+
+    const container = document.createElement('div');
+    container.className = 'mmm-sonos__source mmm-sonos__source--label';
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+    container.style.gap = '0.08rem';
+
+    if (alignment === 'center') {
+      container.style.alignItems = 'center';
+      container.style.textAlign = 'center';
+      container.style.alignSelf = 'center';
+    } else if (alignment === 'left') {
+      container.style.alignItems = 'flex-end';
+      container.style.textAlign = 'right';
+      container.style.alignSelf = 'flex-end';
+    } else {
+      container.style.alignItems = 'flex-start';
+      container.style.textAlign = 'left';
+      container.style.alignSelf = 'flex-start';
+    }
+
+    const label = document.createElement('span');
+    label.className = 'mmm-sonos__source-label';
+    const labelText = this.config.tvLabel || this.translate('TV_SOURCE_LABEL') || 'Source: TV';
+    label.innerText = labelText;
+    container.appendChild(label);
+
+    return container;
+  },
+
+  _isTvSource(group) {
+    const source = (group?.source || '').toLowerCase();
+    return group?.isTvSource || source === 'tv' || source === 'tvs';
+  },
+
+  _resolveTvSvgSource() {
+    const candidate = this.config.tvIconSvgPath;
+    if (candidate) {
+      const isHttp = /^https?:\/\//i.test(candidate);
+      if (isHttp) {
+        return candidate;
+      }
+      return this.file(candidate);
+    }
+    return this.file('assets/tv-default.svg');
   }
 });

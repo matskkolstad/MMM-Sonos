@@ -170,6 +170,31 @@
   white-space: normal;
 }
 
+.mmm-sonos__source {
+  display: flex;
+  gap: 0.3rem;
+  font-size: 0.78em;
+  opacity: 0.85;
+  letter-spacing: 0.02em;
+}
+
+.mmm-sonos__source-icon {
+  font-size: 1.3em;
+  line-height: 1;
+}
+
+.mmm-sonos__source-icon--text {
+  letter-spacing: 0.04em;
+}
+
+.mmm-sonos__source-icon--svg {
+  display: block;
+}
+
+.mmm-sonos__source-label {
+  text-transform: uppercase;
+}
+
 .mmm-sonos__empty {
   font-size: 0.9em;
   opacity: 0.6;

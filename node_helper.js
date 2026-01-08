@@ -50,6 +50,10 @@ module.exports = NodeHelper.create({
         showWhenPaused: false,
         hideWhenNothingPlaying: true,
         forceHttps: false,
+        showTvSource: true,
+        showTvIcon: true,
+        tvIcon: '📺',
+        tvLabel: null,
         debug: false
       },
       config
@@ -239,16 +243,23 @@ module.exports = NodeHelper.create({
         const stateRaw = await coordinator.getCurrentState();
         const state = typeof stateRaw === 'string' ? stateRaw.toLowerCase() : 'unknown';
 
-        if (state !== 'playing' && !this.config.showWhenPaused) {
-          this.sendDebug('Skipping group because it is not playing', name || id, state);
+        const track = await coordinator.currentTrack();
+        const source = this._detectSource(track);
+        const isTvSource = source === 'tv';
+
+        const allowWhenPaused = this.config.showWhenPaused || isTvSource;
+        if (state !== 'playing' && !allowWhenPaused) {
+          this.sendDebug('Skipping group because it is not playing (and not allowed when paused)', name || id, state, {
+            isTvSource
+          });
           continue;
         }
-        if (state === 'stopped' && this.config.hideWhenNothingPlaying) {
+
+        if (state === 'stopped' && this.config.hideWhenNothingPlaying && !isTvSource) {
           this.sendDebug('Hiding stopped group because hideWhenNothingPlaying is enabled', name || id);
           continue;
         }
 
-        const track = await coordinator.currentTrack();
         const albumArt = this._normalizeArt(track?.albumArtURL || track?.absoluteAlbumArtURI, coordinator);
 
         const coordinatorName = await this._inferCoordinatorName(coordinator);
@@ -256,10 +267,12 @@ module.exports = NodeHelper.create({
           id: id || coordinator.uuid || coordinator.host,
           name: name || coordinatorName || 'Sonos',
           playbackState: state,
-          title: track?.title || null,
+          title: track?.title || (isTvSource ? 'TV' : null),
           artist: track?.artist || null,
           album: track?.album || null,
           albumArt,
+          source,
+          isTvSource,
           members: members.length ? members : [coordinatorName || name || 'Sonos']
         });
       } catch (error) {
@@ -330,6 +343,74 @@ module.exports = NodeHelper.create({
     }
 
     return `${proto}://${host}:${port}${uri.startsWith('/') ? uri : `/${uri}`}`;
+  },
+
+  _detectSource(track) {
+    if (!track || typeof track !== 'object') {
+      return null;
+    }
+
+    if (this._isTvTrack(track)) {
+      return 'tv';
+    }
+
+    const type = (track.type || track.metadata?.type || '').toLowerCase();
+    if (type) {
+      return type;
+    }
+
+    const uri = (track.uri || '').toLowerCase();
+    if (!uri) {
+      return null;
+    }
+
+    if (uri.startsWith('x-sonosapi-stream:') || uri.includes('radio')) {
+      return 'radio';
+    }
+
+    if (uri.includes('spotify')) {
+      return 'spotify';
+    }
+
+    return null;
+  },
+
+  _isTvTrack(track) {
+    if (!track || typeof track !== 'object') {
+      return false;
+    }
+
+    const type = (track.type || track.metadata?.type || '').toLowerCase();
+    const title = (track.title || '').toLowerCase();
+    const uri = (track.uri || '').toLowerCase();
+    const station = (track.stationName || track.streamTitle || '').toLowerCase();
+    const protocol = (track.metadata?.protocolInfo || '').toLowerCase();
+
+    if (title === 'tv' || station === 'tv') {
+      return true;
+    }
+
+    if (uri.includes('x-sonos-htastream:') || uri.includes('x-sonos-htastream')) {
+      return true;
+    }
+
+    if (uri.includes(':spdif') || uri.includes(':hdmi')) {
+      return true;
+    }
+
+    if (protocol.includes('htastream')) {
+      return true;
+    }
+
+    if (type === 'tv' || type === 'ht' || type === 'home theater') {
+      return true;
+    }
+
+    if (type === 'line_in' && (title === 'tv' || uri.includes('htastream') || station === 'tv')) {
+      return true;
+    }
+
+    return false;
   },
 
   _pick(source, keys) {

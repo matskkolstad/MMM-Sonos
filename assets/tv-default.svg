@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="TV icon">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.65" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.15" />
+    </linearGradient>
+  </defs>
+  <rect x="6" y="10" width="52" height="36" rx="4" ry="4" fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.4)" stroke-width="2" />
+  <rect x="11" y="15" width="42" height="26" rx="3" ry="3" fill="url(#g)" />
+  <rect x="19" y="50" width="26" height="4" rx="2" ry="2" fill="rgba(255,255,255,0.4)" />
+  <path d="M22 8 L32 18 L42 8" stroke="rgba(255,255,255,0.6)" stroke-width="3" fill="none" stroke-linecap="round" />
+</svg>

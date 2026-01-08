@@ -9,5 +9,7 @@
   "PAUSED": "Pauset",
   "STOPPED": "Stoppet",
   "TRANSITIONING": "Laster",
-  "BUFFERING": "Bufrer"
+  "BUFFERING": "Bufrer",
+  "TV_SOURCE": "TV",
+  "TV_SOURCE_LABEL": "Kilde: TV"
 }

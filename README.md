@@ -129,7 +129,21 @@ Restart MagicMirror² afterwards to load the latest code.
 | `accentuateActive` | `true` | Highlight actively playing groups with a stronger background. |
 | `showAlbum` | `false` | Display album title under the artist when available. |
 | `cardMinWidth` | `150` | Minimum width for each card, used to adapt row/grid layouts. |
+| `showTvSource` | `true` | Show a TV badge when a home-theater input (TV) is active. |
+| `showTvIcon` | `true` | Display a TV icon in the album-art slot when TV is active. Set to `false` to keep the placeholder without the icon. |
+| `tvIconMode` | `'emoji'` | Choose the TV icon type: `'emoji'` (default), `'text'`, or `'svg'`. |
+| `tvIcon` | `'📺'` | Emoji used when `tvIconMode` is `'emoji'`. |
+| `tvIconText` | `'TV'` | Text shown when `tvIconMode` is `'text'`. Scales with `albumArtSize`. |
+| `tvIconSvgPath` | `null` | Path or URL to an SVG used when `tvIconMode` is `'svg'`. If `null`, a bundled `assets/tv-default.svg` is used. |
+| `tvLabel` | `null` | Override the text label for the TV badge (defaults to the translated "TV"). |
 | `debug` | `false` | Log extra information to the MagicMirror console.
+
+### TV icon choices
+
+- **Emoji (default):** `tvIconMode: 'emoji'` with `tvIcon` set to your preferred emoji.
+- **Text:** `tvIconMode: 'text'` with `tvIconText: 'TV'` (or another string). The text scales to `albumArtSize`.
+- **SVG:** `tvIconMode: 'svg'` with `tvIconSvgPath` pointing to the SVG file. You can place your file inside this module at `modules/MMM-Sonos/assets/your-tv.svg` and set `tvIconSvgPath: 'assets/your-tv.svg'`. Remote URLs are also supported. If no path is provided, the bundled `assets/tv-default.svg` is used.
+- **Hide icon:** set `showTvIcon: false` to keep the album-art placeholder without an icon.
 
 ## Additional features
 

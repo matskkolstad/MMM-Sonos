@@ -9,5 +9,7 @@
   "PAUSED": "Paused",
   "STOPPED": "Stopped",
   "TRANSITIONING": "Loading",
-  "BUFFERING": "Buffering"
+  "BUFFERING": "Buffering",
+  "TV_SOURCE": "TV",
+  "TV_SOURCE_LABEL": "Source: TV"
 }
