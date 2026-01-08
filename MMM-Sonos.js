@@ -810,36 +810,38 @@ Module.register('MMM-Sonos', {
     }
 
     progressBars.forEach((bar) => {
-      const initialPosition = parseFloat(bar.dataset.initialPosition);
-      const duration = parseFloat(bar.dataset.duration);
-      const timestamp = parseFloat(bar.dataset.timestamp);
-
-      if (isNaN(initialPosition) || isNaN(duration) || isNaN(timestamp) || duration <= 0) {
+      const progressData = this._parseProgressData(bar.dataset);
+      if (!progressData) {
         return;
       }
 
-      // Calculate elapsed time since the last update
-      const elapsed = (Date.now() - timestamp) / 1000;
-      const currentPosition = Math.min(duration, initialPosition + elapsed);
-      const percentage = Math.min(100, Math.max(0, (currentPosition / duration) * 100));
-
+      const percentage = Math.min(100, Math.max(0, (progressData.currentPosition / progressData.duration) * 100));
       bar.style.width = `${percentage}%`;
     });
 
     timeDisplays.forEach((timeInfo) => {
-      const initialPosition = parseFloat(timeInfo.dataset.initialPosition);
-      const duration = parseFloat(timeInfo.dataset.duration);
-      const timestamp = parseFloat(timeInfo.dataset.timestamp);
-
-      if (isNaN(initialPosition) || isNaN(duration) || isNaN(timestamp) || duration <= 0) {
+      const progressData = this._parseProgressData(timeInfo.dataset);
+      if (!progressData) {
         return;
       }
 
-      // Calculate elapsed time since the last update
-      const elapsed = (Date.now() - timestamp) / 1000;
-      const currentPosition = Math.min(duration, initialPosition + elapsed);
-
-      timeInfo.innerText = `${this._formatTime(currentPosition)} / ${this._formatTime(duration)}`;
+      timeInfo.innerText = `${this._formatTime(progressData.currentPosition)} / ${this._formatTime(progressData.duration)}`;
     });
+  },
+
+  _parseProgressData(dataset) {
+    const initialPosition = parseFloat(dataset.initialPosition);
+    const duration = parseFloat(dataset.duration);
+    const timestamp = parseFloat(dataset.timestamp);
+
+    if (isNaN(initialPosition) || isNaN(duration) || isNaN(timestamp) || duration <= 0) {
+      return null;
+    }
+
+    // Calculate elapsed time since the last update
+    const elapsed = (Date.now() - timestamp) / 1000;
+    const currentPosition = Math.min(duration, initialPosition + elapsed);
+
+    return { initialPosition, duration, timestamp, elapsed, currentPosition };
   }
 });
