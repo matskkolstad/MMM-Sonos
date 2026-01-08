@@ -779,6 +779,11 @@ Module.register('MMM-Sonos', {
   },
 
   _startProgressAnimation() {
+    // Only start the animation timer if progress display is enabled
+    if (!this.config.showProgress) {
+      return;
+    }
+
     // Update progress bars every second for smooth animation
     if (this.progressAnimationTimer) {
       clearInterval(this.progressAnimationTimer);
