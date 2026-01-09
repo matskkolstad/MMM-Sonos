@@ -126,7 +126,17 @@ Module.register('MMM-Sonos', {
   getTranslations() {
     return {
       en: 'translations/en.json',
-      nb: 'translations/nb.json'
+      nb: 'translations/nb.json',
+      'zh-CN': 'translations/zh-CN.json',
+      hi: 'translations/hi.json',
+      es: 'translations/es.json',
+      fr: 'translations/fr.json',
+      ar: 'translations/ar.json',
+      bn: 'translations/bn.json',
+      pt: 'translations/pt.json',
+      ru: 'translations/ru.json',
+      ja: 'translations/ja.json',
+      de: 'translations/de.json'
     };
   },
 

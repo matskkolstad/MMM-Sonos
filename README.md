@@ -233,9 +233,19 @@ The module consists of the following files:
 - **`css/MMM-Sonos.css`** - All module styles including layout modes, animations, and themes
 
 ### Translations
-The module includes multilingual support:
-- **`translations/en.json`** - English translations
-- **`translations/nb.json`** - Norwegian Bokmål translations
+The module includes multilingual support with translations for the 10 most popular languages in the world, plus German:
+- **`translations/en.json`** - English
+- **`translations/nb.json`** - Norwegian Bokmål
+- **`translations/zh-CN.json`** - Mandarin Chinese (Simplified)
+- **`translations/hi.json`** - Hindi
+- **`translations/es.json`** - Spanish
+- **`translations/fr.json`** - French
+- **`translations/ar.json`** - Arabic
+- **`translations/bn.json`** - Bengali
+- **`translations/pt.json`** - Portuguese
+- **`translations/ru.json`** - Russian
+- **`translations/ja.json`** - Japanese
+- **`translations/de.json`** - German
 
 Supported translation keys include error messages, playback states, and UI labels. Add your own language by creating a new JSON file in the `translations` folder and adding it to the `getTranslations()` method in `MMM-Sonos.js`.
 

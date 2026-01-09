@@ -1,0 +1,20 @@
+{
+  "ERROR": "エラー",
+  "NO_ACTIVE_SONOS": "現在何も再生されていません",
+  "NO_VISIBLE_SONOS": "現在のフィルターでスピーカーが表示されていません",
+  "UPDATED": "更新済み",
+  "UNKNOWN_TRACK": "不明なトラック",
+  "PLAYING": "再生中",
+  "PAUSED_PLAYBACK": "一時停止中",
+  "PAUSED": "一時停止中",
+  "STOPPED": "停止",
+  "TRANSITIONING": "読み込み中",
+  "BUFFERING": "バッファリング中",
+  "TV_SOURCE": "テレビ",
+  "TV_SOURCE_LABEL": "ソース: テレビ",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "ラジオ",
+  "SOURCE_LINE_IN": "ライン入力",
+  "SOURCE_UNKNOWN": "不明",
+  "VOLUME": "音量"
+}

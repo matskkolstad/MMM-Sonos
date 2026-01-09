@@ -1,0 +1,20 @@
+{
+  "ERROR": "خطأ",
+  "NO_ACTIVE_SONOS": "لا يوجد شيء قيد التشغيل الآن",
+  "NO_VISIBLE_SONOS": "لا توجد مكبرات صوت مرئية مع المرشحات الحالية",
+  "UPDATED": "محدّث",
+  "UNKNOWN_TRACK": "مسار غير معروف",
+  "PLAYING": "قيد التشغيل",
+  "PAUSED_PLAYBACK": "متوقف مؤقتاً",
+  "PAUSED": "متوقف مؤقتاً",
+  "STOPPED": "متوقف",
+  "TRANSITIONING": "جاري التحميل",
+  "BUFFERING": "جاري التخزين المؤقت",
+  "TV_SOURCE": "التلفزيون",
+  "TV_SOURCE_LABEL": "المصدر: التلفزيون",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "راديو",
+  "SOURCE_LINE_IN": "مدخل خطي",
+  "SOURCE_UNKNOWN": "غير معروف",
+  "VOLUME": "مستوى الصوت"
+}

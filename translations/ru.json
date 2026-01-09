@@ -1,0 +1,20 @@
+{
+  "ERROR": "Ошибка",
+  "NO_ACTIVE_SONOS": "Сейчас ничего не воспроизводится",
+  "NO_VISIBLE_SONOS": "Нет видимых динамиков с текущими фильтрами",
+  "UPDATED": "Обновлено",
+  "UNKNOWN_TRACK": "Неизвестный трек",
+  "PLAYING": "Воспроизведение",
+  "PAUSED_PLAYBACK": "Пауза",
+  "PAUSED": "Пауза",
+  "STOPPED": "Остановлено",
+  "TRANSITIONING": "Загрузка",
+  "BUFFERING": "Буферизация",
+  "TV_SOURCE": "ТВ",
+  "TV_SOURCE_LABEL": "Источник: ТВ",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "Радио",
+  "SOURCE_LINE_IN": "Линейный вход",
+  "SOURCE_UNKNOWN": "Неизвестно",
+  "VOLUME": "Громкость"
+}
