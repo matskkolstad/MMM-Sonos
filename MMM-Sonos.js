@@ -87,7 +87,8 @@ Module.register('MMM-Sonos', {
         const newTimestamp = payload.timestamp || Date.now();
         
         // Only update DOM if there are meaningful changes, not just progress updates
-        const shouldUpdateDom = this._shouldUpdateDom(newGroups);
+        // Check this BEFORE updating this.groups and this.lastUpdated
+        const shouldUpdateDom = this._shouldUpdateDom(newGroups, newTimestamp);
         
         this.groups = newGroups;
         this.lastUpdated = newTimestamp;
@@ -860,7 +861,7 @@ Module.register('MMM-Sonos', {
     return { initialPosition, duration, timestamp, elapsed, currentPosition };
   },
 
-  _shouldUpdateDom(newGroups) {
+  _shouldUpdateDom(newGroups, newTimestamp) {
     // Always update if we don't have previous data or group count changed
     if (!this.groups || this.groups.length !== newGroups.length) {
       return true;
@@ -878,6 +879,9 @@ Module.register('MMM-Sonos', {
         oldGroupMap.set(group.id, group);
       }
     });
+
+    // Calculate expected time elapsed since last update (using OLD timestamp)
+    const timeElapsed = this.lastUpdated ? (newTimestamp - this.lastUpdated) / 1000 : 0;
 
     // Check if any meaningful content has changed
     for (const newGroup of newGroups) {
@@ -903,14 +907,16 @@ Module.register('MMM-Sonos', {
 
       // Check for significant position changes (e.g., user seeking in track)
       // Allow a tolerance of 3 seconds to account for normal drift and network delays
-      if (oldGroup.position != null && newGroup.position != null) {
-        const expectedPosition = oldGroup.position + ((Date.now() - this.lastUpdated) / 1000);
+      if (oldGroup.position !== null && oldGroup.position !== undefined &&
+          newGroup.position !== null && newGroup.position !== undefined) {
+        const expectedPosition = oldGroup.position + timeElapsed;
         const positionDiff = Math.abs(newGroup.position - expectedPosition);
         if (positionDiff > 3) {
           this._log('Significant position change detected', {
             oldPosition: oldGroup.position,
             newPosition: newGroup.position,
             expectedPosition,
+            timeElapsed,
             diff: positionDiff
           });
           return true;
