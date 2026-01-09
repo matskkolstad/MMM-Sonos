@@ -233,7 +233,7 @@ The module consists of the following files:
 - **`css/MMM-Sonos.css`** - All module styles including layout modes, animations, and themes
 
 ### Translations
-The module includes multilingual support for all 44 MagicMirror supported languages:
+The module includes multilingual support for all 45 MagicMirror supported languages:
 
 **Languages with translations:**
 - Afrikaans (af), Bulgarian (bg), Catalan (ca), Czech (cs), Chuvash (cv)
