@@ -1,0 +1,20 @@
+{
+  "ERROR": "Fejl",
+  "NO_ACTIVE_SONOS": "Intet afspilles i øjeblikket",
+  "NO_VISIBLE_SONOS": "Ingen højttalere er synlige med de aktuelle filtre",
+  "UPDATED": "Opdateret",
+  "UNKNOWN_TRACK": "Ukendt nummer",
+  "PLAYING": "Afspiller",
+  "PAUSED_PLAYBACK": "Sat på pause",
+  "PAUSED": "Sat på pause",
+  "STOPPED": "Stoppet",
+  "TRANSITIONING": "Indlæser",
+  "BUFFERING": "Buffering",
+  "TV_SOURCE": "TV",
+  "TV_SOURCE_LABEL": "Kilde: TV",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "Radio",
+  "SOURCE_LINE_IN": "Linjeindgang",
+  "SOURCE_UNKNOWN": "Ukendt",
+  "VOLUME": "Lydstyrke"
+}

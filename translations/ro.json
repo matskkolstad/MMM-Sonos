@@ -1,0 +1,20 @@
+{
+  "ERROR": "Eroare",
+  "NO_ACTIVE_SONOS": "Nu se redă nimic în acest moment",
+  "NO_VISIBLE_SONOS": "Nu există difuzoare vizibile cu filtrele curente",
+  "UPDATED": "Actualizat",
+  "UNKNOWN_TRACK": "Pistă necunoscută",
+  "PLAYING": "Redare",
+  "PAUSED_PLAYBACK": "Întrerupt",
+  "PAUSED": "Întrerupt",
+  "STOPPED": "Oprit",
+  "TRANSITIONING": "Se încarcă",
+  "BUFFERING": "Se bufferează",
+  "TV_SOURCE": "TV",
+  "TV_SOURCE_LABEL": "Sursă: TV",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "Radio",
+  "SOURCE_LINE_IN": "Intrare linie",
+  "SOURCE_UNKNOWN": "Necunoscut",
+  "VOLUME": "Volum"
+}

@@ -1,0 +1,20 @@
+{
+  "ERROR": "Σφάλμα",
+  "NO_ACTIVE_SONOS": "Τίποτα δεν αναπαράγεται αυτή τη στιγμή",
+  "NO_VISIBLE_SONOS": "Δεν υπάρχουν ορατά ηχεία με τα τρέχοντα φίλτρα",
+  "UPDATED": "Ενημερώθηκε",
+  "UNKNOWN_TRACK": "Άγνωστο κομμάτι",
+  "PLAYING": "Αναπαραγωγή",
+  "PAUSED_PLAYBACK": "Σε παύση",
+  "PAUSED": "Σε παύση",
+  "STOPPED": "Σταματημένο",
+  "TRANSITIONING": "Φόρτωση",
+  "BUFFERING": "Προσωρινή αποθήκευση",
+  "TV_SOURCE": "TV",
+  "TV_SOURCE_LABEL": "Πηγή: TV",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "Ραδιόφωνο",
+  "SOURCE_LINE_IN": "Είσοδος γραμμής",
+  "SOURCE_UNKNOWN": "Άγνωστο",
+  "VOLUME": "Ένταση"
+}

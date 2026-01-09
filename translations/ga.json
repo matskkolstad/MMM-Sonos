@@ -1,0 +1,20 @@
+{
+  "ERROR": "Earráid",
+  "NO_ACTIVE_SONOS": "Níl aon rud á sheinm faoi láthair",
+  "NO_VISIBLE_SONOS": "Níl aon chainteoirí infheicthe leis na scagairí reatha",
+  "UPDATED": "Nuashonraithe",
+  "UNKNOWN_TRACK": "Rian anaithnid",
+  "PLAYING": "Ag seinm",
+  "PAUSED_PLAYBACK": "Curtha ar sos",
+  "PAUSED": "Curtha ar sos",
+  "STOPPED": "Stoptha",
+  "TRANSITIONING": "Á lódáil",
+  "BUFFERING": "Maoláin",
+  "TV_SOURCE": "Teilifís",
+  "TV_SOURCE_LABEL": "Foinse: Teilifís",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "Raidió",
+  "SOURCE_LINE_IN": "Ionchur líne",
+  "SOURCE_UNKNOWN": "Anaithnid",
+  "VOLUME": "Toirt"
+}

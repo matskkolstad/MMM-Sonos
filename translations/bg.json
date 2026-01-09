@@ -1,0 +1,20 @@
+{
+  "ERROR": "Грешка",
+  "NO_ACTIVE_SONOS": "В момента нищо не се възпроизвежда",
+  "NO_VISIBLE_SONOS": "Няма видими говорители с текущите филтри",
+  "UPDATED": "Актуализирано",
+  "UNKNOWN_TRACK": "Неизвестна песен",
+  "PLAYING": "Възпроизвеждане",
+  "PAUSED_PLAYBACK": "На пауза",
+  "PAUSED": "На пауза",
+  "STOPPED": "Спряно",
+  "TRANSITIONING": "Зареждане",
+  "BUFFERING": "Буфериране",
+  "TV_SOURCE": "ТВ",
+  "TV_SOURCE_LABEL": "Източник: ТВ",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "Радио",
+  "SOURCE_LINE_IN": "Линеен вход",
+  "SOURCE_UNKNOWN": "Неизвестно",
+  "VOLUME": "Сила на звука"
+}

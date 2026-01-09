@@ -1,0 +1,20 @@
+{
+  "ERROR": "Klaida",
+  "NO_ACTIVE_SONOS": "Šiuo metu nieko negrojama",
+  "NO_VISIBLE_SONOS": "Su dabartiniais filtrais nematoma jokių garsiakalbių",
+  "UPDATED": "Atnaujinta",
+  "UNKNOWN_TRACK": "Nežinomas takelis",
+  "PLAYING": "Groja",
+  "PAUSED_PLAYBACK": "Pristabdyta",
+  "PAUSED": "Pristabdyta",
+  "STOPPED": "Sustabdyta",
+  "TRANSITIONING": "Įkeliama",
+  "BUFFERING": "Buferizuojama",
+  "TV_SOURCE": "TV",
+  "TV_SOURCE_LABEL": "Šaltinis: TV",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "Radijas",
+  "SOURCE_LINE_IN": "Linijos įvestis",
+  "SOURCE_UNKNOWN": "Nežinomas",
+  "VOLUME": "Garsumas"
+}

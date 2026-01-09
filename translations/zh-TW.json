@@ -1,0 +1,20 @@
+{
+  "ERROR": "錯誤",
+  "NO_ACTIVE_SONOS": "目前沒有播放任何內容",
+  "NO_VISIBLE_SONOS": "目前的篩選條件下沒有可見的揚聲器",
+  "UPDATED": "已更新",
+  "UNKNOWN_TRACK": "未知曲目",
+  "PLAYING": "播放中",
+  "PAUSED_PLAYBACK": "已暫停",
+  "PAUSED": "已暫停",
+  "STOPPED": "已停止",
+  "TRANSITIONING": "載入中",
+  "BUFFERING": "緩衝中",
+  "TV_SOURCE": "電視",
+  "TV_SOURCE_LABEL": "來源：電視",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "廣播",
+  "SOURCE_LINE_IN": "線路輸入",
+  "SOURCE_UNKNOWN": "未知",
+  "VOLUME": "音量"
+}

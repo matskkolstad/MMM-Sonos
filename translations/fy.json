@@ -1,0 +1,20 @@
+{
+  "ERROR": "Flater",
+  "NO_ACTIVE_SONOS": "Der wurdt op dit stuit neat ôfspile",
+  "NO_VISIBLE_SONOS": "Gjin sprekkers sichtber mei de hjoeddeistige filters",
+  "UPDATED": "Bywurke",
+  "UNKNOWN_TRACK": "Unbekend nûmer",
+  "PLAYING": "Oan it spyljen",
+  "PAUSED_PLAYBACK": "Pauzearre",
+  "PAUSED": "Pauzearre",
+  "STOPPED": "Stoppe",
+  "TRANSITIONING": "Lade",
+  "BUFFERING": "Buffere",
+  "TV_SOURCE": "TV",
+  "TV_SOURCE_LABEL": "Boarne: TV",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "Radio",
+  "SOURCE_LINE_IN": "Line-yn",
+  "SOURCE_UNKNOWN": "Unbekend",
+  "VOLUME": "Folume"
+}

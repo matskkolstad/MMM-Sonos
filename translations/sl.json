@@ -1,0 +1,20 @@
+{
+  "ERROR": "Napaka",
+  "NO_ACTIVE_SONOS": "Trenutno se nič ne predvaja",
+  "NO_VISIBLE_SONOS": "S trenutnimi filtri ni vidnih zvočnikov",
+  "UPDATED": "Posodobljeno",
+  "UNKNOWN_TRACK": "Neznana skladba",
+  "PLAYING": "Predvajanje",
+  "PAUSED_PLAYBACK": "Začasno ustavljeno",
+  "PAUSED": "Začasno ustavljeno",
+  "STOPPED": "Ustavljeno",
+  "TRANSITIONING": "Nalaganje",
+  "BUFFERING": "Predpomnjenje",
+  "TV_SOURCE": "TV",
+  "TV_SOURCE_LABEL": "Vir: TV",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "Radio",
+  "SOURCE_LINE_IN": "Linijski vhod",
+  "SOURCE_UNKNOWN": "Neznano",
+  "VOLUME": "Glasnost"
+}

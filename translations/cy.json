@@ -1,0 +1,20 @@
+{
+  "ERROR": "Gwall",
+  "NO_ACTIVE_SONOS": "Dim byd yn chwarae ar hyn o bryd",
+  "NO_VISIBLE_SONOS": "Dim seinyddion yn weladwy gyda'r hidlwyr cyfredol",
+  "UPDATED": "Wedi'i ddiweddaru",
+  "UNKNOWN_TRACK": "Trac anhysbys",
+  "PLAYING": "Yn chwarae",
+  "PAUSED_PLAYBACK": "Wedi'i oedi",
+  "PAUSED": "Wedi'i oedi",
+  "STOPPED": "Wedi'i stopio",
+  "TRANSITIONING": "Yn llwytho",
+  "BUFFERING": "Yn byfferu",
+  "TV_SOURCE": "Teledu",
+  "TV_SOURCE_LABEL": "Ffynhonnell: Teledu",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "Radio",
+  "SOURCE_LINE_IN": "Mewnbwn llinell",
+  "SOURCE_UNKNOWN": "Anhysbys",
+  "VOLUME": "Sain"
+}

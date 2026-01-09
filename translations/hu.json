@@ -1,0 +1,20 @@
+{
+  "ERROR": "Hiba",
+  "NO_ACTIVE_SONOS": "Jelenleg semmi sem játszódik",
+  "NO_VISIBLE_SONOS": "Nincsenek látható hangszórók a jelenlegi szűrőkkel",
+  "UPDATED": "Frissítve",
+  "UNKNOWN_TRACK": "Ismeretlen szám",
+  "PLAYING": "Lejátszás",
+  "PAUSED_PLAYBACK": "Szüneteltetve",
+  "PAUSED": "Szüneteltetve",
+  "STOPPED": "Leállítva",
+  "TRANSITIONING": "Betöltés",
+  "BUFFERING": "Pufferelés",
+  "TV_SOURCE": "TV",
+  "TV_SOURCE_LABEL": "Forrás: TV",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "Rádió",
+  "SOURCE_LINE_IN": "Vonalbemenet",
+  "SOURCE_UNKNOWN": "Ismeretlen",
+  "VOLUME": "Hangerő"
+}

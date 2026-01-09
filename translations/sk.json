@@ -1,0 +1,20 @@
+{
+  "ERROR": "Chyba",
+  "NO_ACTIVE_SONOS": "Momentálne sa nič neprehráva",
+  "NO_VISIBLE_SONOS": "So súčasnými filtrami nie sú viditeľné žiadne reproduktory",
+  "UPDATED": "Aktualizované",
+  "UNKNOWN_TRACK": "Neznáma skladba",
+  "PLAYING": "Prehráva sa",
+  "PAUSED_PLAYBACK": "Pozastavené",
+  "PAUSED": "Pozastavené",
+  "STOPPED": "Zastavené",
+  "TRANSITIONING": "Načítava sa",
+  "BUFFERING": "Ukladanie do vyrovnávacej pamäte",
+  "TV_SOURCE": "TV",
+  "TV_SOURCE_LABEL": "Zdroj: TV",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "Rádio",
+  "SOURCE_LINE_IN": "Linkový vstup",
+  "SOURCE_UNKNOWN": "Neznámy",
+  "VOLUME": "Hlasitosť"
+}
