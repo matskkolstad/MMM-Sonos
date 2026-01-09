@@ -1,0 +1,20 @@
+{
+  "ERROR": "ত্রুটি",
+  "NO_ACTIVE_SONOS": "এই মুহূর্তে কিছুই বাজছে না",
+  "NO_VISIBLE_SONOS": "বর্তমান ফিল্টারগুলির সাথে কোন স্পিকার দৃশ্যমান নয়",
+  "UPDATED": "আপডেট করা হয়েছে",
+  "UNKNOWN_TRACK": "অজানা ট্র্যাক",
+  "PLAYING": "বাজছে",
+  "PAUSED_PLAYBACK": "বিরাম দেওয়া হয়েছে",
+  "PAUSED": "বিরাম দেওয়া হয়েছে",
+  "STOPPED": "বন্ধ করা হয়েছে",
+  "TRANSITIONING": "লোড হচ্ছে",
+  "BUFFERING": "বাফার হচ্ছে",
+  "TV_SOURCE": "টিভি",
+  "TV_SOURCE_LABEL": "উৎস: টিভি",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "রেডিও",
+  "SOURCE_LINE_IN": "লাইন-ইন",
+  "SOURCE_UNKNOWN": "অজানা",
+  "VOLUME": "ভলিউম"
+}

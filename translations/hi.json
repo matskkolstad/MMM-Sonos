@@ -1,0 +1,20 @@
+{
+  "ERROR": "त्रुटि",
+  "NO_ACTIVE_SONOS": "अभी कुछ भी नहीं चल रहा है",
+  "NO_VISIBLE_SONOS": "वर्तमान फ़िल्टर के साथ कोई स्पीकर दिखाई नहीं दे रहे हैं",
+  "UPDATED": "अपडेट किया गया",
+  "UNKNOWN_TRACK": "अज्ञात ट्रैक",
+  "PLAYING": "चल रहा है",
+  "PAUSED_PLAYBACK": "रोका गया",
+  "PAUSED": "रोका गया",
+  "STOPPED": "बंद किया गया",
+  "TRANSITIONING": "लोड हो रहा है",
+  "BUFFERING": "बफ़र हो रहा है",
+  "TV_SOURCE": "टीवी",
+  "TV_SOURCE_LABEL": "स्रोत: टीवी",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "रेडियो",
+  "SOURCE_LINE_IN": "लाइन-इन",
+  "SOURCE_UNKNOWN": "अज्ञात",
+  "VOLUME": "वॉल्यूम"
+}

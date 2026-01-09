@@ -1,0 +1,20 @@
+{
+  "ERROR": "错误",
+  "NO_ACTIVE_SONOS": "当前没有正在播放的内容",
+  "NO_VISIBLE_SONOS": "当前过滤器下没有可见的扬声器",
+  "UPDATED": "已更新",
+  "UNKNOWN_TRACK": "未知曲目",
+  "PLAYING": "正在播放",
+  "PAUSED_PLAYBACK": "已暂停",
+  "PAUSED": "已暂停",
+  "STOPPED": "已停止",
+  "TRANSITIONING": "加载中",
+  "BUFFERING": "缓冲中",
+  "TV_SOURCE": "电视",
+  "TV_SOURCE_LABEL": "信号源：电视",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "电台",
+  "SOURCE_LINE_IN": "线路输入",
+  "SOURCE_UNKNOWN": "未知",
+  "VOLUME": "音量"
+}

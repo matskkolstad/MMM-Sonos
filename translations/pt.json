@@ -1,0 +1,20 @@
+{
+  "ERROR": "Erro",
+  "NO_ACTIVE_SONOS": "Nada está tocando agora",
+  "NO_VISIBLE_SONOS": "Nenhum alto-falante está visível com os filtros atuais",
+  "UPDATED": "Atualizado",
+  "UNKNOWN_TRACK": "Faixa desconhecida",
+  "PLAYING": "Reproduzindo",
+  "PAUSED_PLAYBACK": "Pausado",
+  "PAUSED": "Pausado",
+  "STOPPED": "Parado",
+  "TRANSITIONING": "Carregando",
+  "BUFFERING": "Armazenando em buffer",
+  "TV_SOURCE": "TV",
+  "TV_SOURCE_LABEL": "Fonte: TV",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "Rádio",
+  "SOURCE_LINE_IN": "Entrada de linha",
+  "SOURCE_UNKNOWN": "Desconhecido",
+  "VOLUME": "Volume"
+}
