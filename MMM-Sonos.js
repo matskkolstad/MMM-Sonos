@@ -901,6 +901,22 @@ Module.register('MMM-Sonos', {
         return true;
       }
 
+      // Check for significant position changes (e.g., user seeking in track)
+      // Allow a tolerance of 3 seconds to account for normal drift and network delays
+      if (oldGroup.position != null && newGroup.position != null) {
+        const expectedPosition = oldGroup.position + ((Date.now() - this.lastUpdated) / 1000);
+        const positionDiff = Math.abs(newGroup.position - expectedPosition);
+        if (positionDiff > 3) {
+          this._log('Significant position change detected', {
+            oldPosition: oldGroup.position,
+            newPosition: newGroup.position,
+            expectedPosition,
+            diff: positionDiff
+          });
+          return true;
+        }
+      }
+
       // Check for member changes
       if (oldGroup.members?.length !== newGroup.members?.length) {
         return true;
