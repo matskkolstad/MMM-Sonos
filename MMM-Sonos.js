@@ -82,12 +82,27 @@ Module.register('MMM-Sonos', {
   this._log('Received socket notification', notification);
 
     switch (notification) {
-      case 'SONOS_DATA':
-        this.groups = payload.groups || [];
-        this.lastUpdated = payload.timestamp || Date.now();
+      case 'SONOS_DATA': {
+        const newGroups = payload.groups || [];
+        const newTimestamp = payload.timestamp || Date.now();
+        
+        // Only update DOM if there are meaningful changes, not just progress updates
+        const shouldUpdateDom = this._shouldUpdateDom(newGroups);
+        
+        this.groups = newGroups;
+        this.lastUpdated = newTimestamp;
         this.error = null;
-        this.updateDom();
+        
+        if (shouldUpdateDom) {
+          this._log('Content changed, updating DOM');
+          this.updateDom();
+        } else {
+          this._log('Only progress changed, skipping DOM update');
+          // Update progress bars with new server data without re-rendering
+          this._updateProgressDataFromServer(newGroups, newTimestamp);
+        }
         break;
+      }
 
       case 'SONOS_ERROR':
         this.error = payload;
@@ -843,5 +858,99 @@ Module.register('MMM-Sonos', {
     const currentPosition = Math.min(duration, initialPosition + elapsed);
 
     return { initialPosition, duration, timestamp, elapsed, currentPosition };
+  },
+
+  _shouldUpdateDom(newGroups) {
+    // Always update if we don't have previous data or group count changed
+    if (!this.groups || this.groups.length !== newGroups.length) {
+      return true;
+    }
+
+    // If no groups at all, no need to update
+    if (newGroups.length === 0) {
+      return this.groups.length !== 0;
+    }
+
+    // Create maps by group ID for efficient comparison
+    const oldGroupMap = new Map();
+    this.groups.forEach((group) => {
+      if (group.id) {
+        oldGroupMap.set(group.id, group);
+      }
+    });
+
+    // Check if any meaningful content has changed
+    for (const newGroup of newGroups) {
+      const oldGroup = oldGroupMap.get(newGroup.id);
+
+      // New group or group no longer exists
+      if (!oldGroup) {
+        return true;
+      }
+
+      // Check for changes in identifying or visible properties
+      if (oldGroup.name !== newGroup.name ||
+          oldGroup.title !== newGroup.title ||
+          oldGroup.artist !== newGroup.artist ||
+          oldGroup.album !== newGroup.album ||
+          oldGroup.albumArt !== newGroup.albumArt ||
+          oldGroup.playbackState !== newGroup.playbackState ||
+          oldGroup.source !== newGroup.source ||
+          oldGroup.volume !== newGroup.volume ||
+          oldGroup.duration !== newGroup.duration) {
+        return true;
+      }
+
+      // Check for member changes
+      if (oldGroup.members?.length !== newGroup.members?.length) {
+        return true;
+      }
+      if (oldGroup.members && newGroup.members) {
+        for (let j = 0; j < oldGroup.members.length; j++) {
+          if (oldGroup.members[j] !== newGroup.members[j]) {
+            return true;
+          }
+        }
+      }
+    }
+
+    // Only position/progress has changed, no need to update DOM
+    return false;
+  },
+
+  _updateProgressDataFromServer(newGroups, newTimestamp) {
+    if (!this.config.showProgress) {
+      return;
+    }
+
+    // Update the dataset of existing progress bars without re-rendering
+    newGroups.forEach((group) => {
+      if (!group.position || !group.duration || group.duration <= 0) {
+        return;
+      }
+
+      // Find the progress elements for this group
+      const groupElement = document.querySelector(`.mmm-sonos__group[data-group-id="${group.id}"]`);
+      if (!groupElement) {
+        return;
+      }
+
+      const progressBar = groupElement.querySelector('.mmm-sonos__progress-bar');
+      const timeDisplay = groupElement.querySelector('.mmm-sonos__progress-time');
+
+      if (progressBar) {
+        // Update the dataset with new server position
+        progressBar.dataset.initialPosition = group.position;
+        progressBar.dataset.duration = group.duration;
+        progressBar.dataset.timestamp = newTimestamp;
+      }
+
+      if (timeDisplay) {
+        // Update the dataset with new server position
+        timeDisplay.dataset.initialPosition = group.position;
+        timeDisplay.dataset.duration = group.duration;
+        timeDisplay.dataset.timestamp = newTimestamp;
+      }
+    });
   }
 });
