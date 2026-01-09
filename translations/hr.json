@@ -1,0 +1,20 @@
+{
+  "ERROR": "Pogreška",
+  "NO_ACTIVE_SONOS": "Trenutno se ništa ne reproducira",
+  "NO_VISIBLE_SONOS": "Nema vidljivih zvučnika s trenutnim filterima",
+  "UPDATED": "Ažurirano",
+  "UNKNOWN_TRACK": "Nepoznata pjesma",
+  "PLAYING": "Reprodukcija",
+  "PAUSED_PLAYBACK": "Pauzirano",
+  "PAUSED": "Pauzirano",
+  "STOPPED": "Zaustavljeno",
+  "TRANSITIONING": "Učitavanje",
+  "BUFFERING": "Spremanje u međuspremnik",
+  "TV_SOURCE": "TV",
+  "TV_SOURCE_LABEL": "Izvor: TV",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "Radio",
+  "SOURCE_LINE_IN": "Linijski ulaz",
+  "SOURCE_UNKNOWN": "Nepoznato",
+  "VOLUME": "Glasnoća"
+}

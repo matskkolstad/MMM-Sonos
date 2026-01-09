@@ -1,0 +1,20 @@
+{
+  "ERROR": "Kesalahan",
+  "NO_ACTIVE_SONOS": "Tidak ada yang diputar saat ini",
+  "NO_VISIBLE_SONOS": "Tidak ada speaker yang terlihat dengan filter saat ini",
+  "UPDATED": "Diperbarui",
+  "UNKNOWN_TRACK": "Trek tidak diketahui",
+  "PLAYING": "Memutar",
+  "PAUSED_PLAYBACK": "Dijeda",
+  "PAUSED": "Dijeda",
+  "STOPPED": "Dihentikan",
+  "TRANSITIONING": "Memuat",
+  "BUFFERING": "Buffering",
+  "TV_SOURCE": "TV",
+  "TV_SOURCE_LABEL": "Sumber: TV",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "Radio",
+  "SOURCE_LINE_IN": "Masukan baris",
+  "SOURCE_UNKNOWN": "Tidak diketahui",
+  "VOLUME": "Volume"
+}

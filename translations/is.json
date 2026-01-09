@@ -1,0 +1,20 @@
+{
+  "ERROR": "Villa",
+  "NO_ACTIVE_SONOS": "Ekkert er að spila núna",
+  "NO_VISIBLE_SONOS": "Engir hátalararar eru sýnilegir með núverandi síum",
+  "UPDATED": "Uppfært",
+  "UNKNOWN_TRACK": "Óþekkt lag",
+  "PLAYING": "Spilar",
+  "PAUSED_PLAYBACK": "Í bið",
+  "PAUSED": "Í bið",
+  "STOPPED": "Stöðvað",
+  "TRANSITIONING": "Hleður",
+  "BUFFERING": "Biðminni",
+  "TV_SOURCE": "Sjónvarp",
+  "TV_SOURCE_LABEL": "Heimild: Sjónvarp",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "Útvarp",
+  "SOURCE_LINE_IN": "Línuinntak",
+  "SOURCE_UNKNOWN": "Óþekkt",
+  "VOLUME": "Hljóðstyrkur"
+}

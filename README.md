@@ -233,19 +233,53 @@ The module consists of the following files:
 - **`css/MMM-Sonos.css`** - All module styles including layout modes, animations, and themes
 
 ### Translations
-The module includes multilingual support with translations for the 10 most popular languages in the world, plus German:
-- **`translations/en.json`** - English
-- **`translations/nb.json`** - Norwegian Bokmål
-- **`translations/zh-CN.json`** - Mandarin Chinese (Simplified)
-- **`translations/hi.json`** - Hindi
-- **`translations/es.json`** - Spanish
-- **`translations/fr.json`** - French
+The module includes multilingual support with translations for all languages supported by MagicMirror:
+- **`translations/af.json`** - Afrikaans
 - **`translations/ar.json`** - Arabic
+- **`translations/bg.json`** - Bulgarian
 - **`translations/bn.json`** - Bengali
-- **`translations/pt.json`** - Portuguese
-- **`translations/ru.json`** - Russian
-- **`translations/ja.json`** - Japanese
+- **`translations/ca.json`** - Catalan
+- **`translations/cs.json`** - Czech
+- **`translations/cy.json`** - Welsh
+- **`translations/da.json`** - Danish
 - **`translations/de.json`** - German
+- **`translations/el.json`** - Greek
+- **`translations/en.json`** - English
+- **`translations/es.json`** - Spanish
+- **`translations/et.json`** - Estonian
+- **`translations/fi.json`** - Finnish
+- **`translations/fr.json`** - French
+- **`translations/fy.json`** - Frisian
+- **`translations/ga.json`** - Irish
+- **`translations/gl.json`** - Galician
+- **`translations/he.json`** - Hebrew
+- **`translations/hi.json`** - Hindi
+- **`translations/hr.json`** - Croatian
+- **`translations/hu.json`** - Hungarian
+- **`translations/id.json`** - Indonesian
+- **`translations/is.json`** - Icelandic
+- **`translations/it.json`** - Italian
+- **`translations/ja.json`** - Japanese
+- **`translations/ko.json`** - Korean
+- **`translations/lt.json`** - Lithuanian
+- **`translations/lv.json`** - Latvian
+- **`translations/ms.json`** - Malay
+- **`translations/nb.json`** - Norwegian Bokmål
+- **`translations/nl.json`** - Dutch
+- **`translations/pl.json`** - Polish
+- **`translations/pt.json`** - Portuguese
+- **`translations/pt-BR.json`** - Portuguese (Brazilian)
+- **`translations/ro.json`** - Romanian
+- **`translations/ru.json`** - Russian
+- **`translations/sk.json`** - Slovak
+- **`translations/sl.json`** - Slovenian
+- **`translations/sv.json`** - Swedish
+- **`translations/th.json`** - Thai
+- **`translations/tr.json`** - Turkish
+- **`translations/uk.json`** - Ukrainian
+- **`translations/vi.json`** - Vietnamese
+- **`translations/zh-CN.json`** - Chinese (Simplified)
+- **`translations/zh-TW.json`** - Chinese (Traditional)
 
 Supported translation keys include error messages, playback states, and UI labels. Add your own language by creating a new JSON file in the `translations` folder and adding it to the `getTranslations()` method in `MMM-Sonos.js`.
 

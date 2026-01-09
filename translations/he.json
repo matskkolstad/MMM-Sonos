@@ -1,0 +1,20 @@
+{
+  "ERROR": "שגיאה",
+  "NO_ACTIVE_SONOS": "שום דבר לא מנגן כרגע",
+  "NO_VISIBLE_SONOS": "אין רמקולים גלויים עם המסננים הנוכחיים",
+  "UPDATED": "עודכן",
+  "UNKNOWN_TRACK": "רצועה לא ידועה",
+  "PLAYING": "מנגן",
+  "PAUSED_PLAYBACK": "מושהה",
+  "PAUSED": "מושהה",
+  "STOPPED": "נעצר",
+  "TRANSITIONING": "טוען",
+  "BUFFERING": "שולח לזיכרון מטמון",
+  "TV_SOURCE": "טלוויזיה",
+  "TV_SOURCE_LABEL": "מקור: טלוויזיה",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "רדיו",
+  "SOURCE_LINE_IN": "קו כניסה",
+  "SOURCE_UNKNOWN": "לא ידוע",
+  "VOLUME": "עוצמת קול"
+}

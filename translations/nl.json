@@ -1,0 +1,20 @@
+{
+  "ERROR": "Fout",
+  "NO_ACTIVE_SONOS": "Er speelt momenteel niets",
+  "NO_VISIBLE_SONOS": "Geen luidsprekers zichtbaar met de huidige filters",
+  "UPDATED": "Bijgewerkt",
+  "UNKNOWN_TRACK": "Onbekend nummer",
+  "PLAYING": "Aan het spelen",
+  "PAUSED_PLAYBACK": "Gepauzeerd",
+  "PAUSED": "Gepauzeerd",
+  "STOPPED": "Gestopt",
+  "TRANSITIONING": "Laden",
+  "BUFFERING": "Bufferen",
+  "TV_SOURCE": "TV",
+  "TV_SOURCE_LABEL": "Bron: TV",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "Radio",
+  "SOURCE_LINE_IN": "Lijn-ingang",
+  "SOURCE_UNKNOWN": "Onbekend",
+  "VOLUME": "Volume"
+}

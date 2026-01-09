@@ -1,0 +1,20 @@
+{
+  "ERROR": "Hata",
+  "NO_ACTIVE_SONOS": "Şu anda hiçbir şey çalmıyor",
+  "NO_VISIBLE_SONOS": "Mevcut filtrelerle görünür hoparlör yok",
+  "UPDATED": "Güncellendi",
+  "UNKNOWN_TRACK": "Bilinmeyen parça",
+  "PLAYING": "Oynatılıyor",
+  "PAUSED_PLAYBACK": "Duraklatıldı",
+  "PAUSED": "Duraklatıldı",
+  "STOPPED": "Durduruldu",
+  "TRANSITIONING": "Yükleniyor",
+  "BUFFERING": "Arabelleğe alınıyor",
+  "TV_SOURCE": "TV",
+  "TV_SOURCE_LABEL": "Kaynak: TV",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "Radyo",
+  "SOURCE_LINE_IN": "Hat girişi",
+  "SOURCE_UNKNOWN": "Bilinmiyor",
+  "VOLUME": "Ses"
+}

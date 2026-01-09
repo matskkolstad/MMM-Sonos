@@ -1,0 +1,20 @@
+{
+  "ERROR": "Помилка",
+  "NO_ACTIVE_SONOS": "Зараз нічого не відтворюється",
+  "NO_VISIBLE_SONOS": "Немає видимих динаміків з поточними фільтрами",
+  "UPDATED": "Оновлено",
+  "UNKNOWN_TRACK": "Невідомий трек",
+  "PLAYING": "Відтворення",
+  "PAUSED_PLAYBACK": "Призупинено",
+  "PAUSED": "Призупинено",
+  "STOPPED": "Зупинено",
+  "TRANSITIONING": "Завантаження",
+  "BUFFERING": "Буферизація",
+  "TV_SOURCE": "ТБ",
+  "TV_SOURCE_LABEL": "Джерело: ТБ",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "Радіо",
+  "SOURCE_LINE_IN": "Лінійний вхід",
+  "SOURCE_UNKNOWN": "Невідомо",
+  "VOLUME": "Гучність"
+}

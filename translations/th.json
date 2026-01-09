@@ -1,0 +1,20 @@
+{
+  "ERROR": "ข้อผิดพลาด",
+  "NO_ACTIVE_SONOS": "ไม่มีสิ่งใดกำลังเล่นอยู่ในขณะนี้",
+  "NO_VISIBLE_SONOS": "ไม่มีลำโพงที่มองเห็นได้ด้วยตัวกรองปัจจุบัน",
+  "UPDATED": "อัปเดตแล้ว",
+  "UNKNOWN_TRACK": "แทร็กที่ไม่รู้จัก",
+  "PLAYING": "กำลังเล่น",
+  "PAUSED_PLAYBACK": "หยุดชั่วคราว",
+  "PAUSED": "หยุดชั่วคราว",
+  "STOPPED": "หยุดแล้ว",
+  "TRANSITIONING": "กำลังโหลด",
+  "BUFFERING": "กำลังบัฟเฟอร์",
+  "TV_SOURCE": "ทีวี",
+  "TV_SOURCE_LABEL": "แหล่งที่มา: ทีวี",
+  "SOURCE_SPOTIFY": "Spotify",
+  "SOURCE_RADIO": "วิทยุ",
+  "SOURCE_LINE_IN": "ไลน์อิน",
+  "SOURCE_UNKNOWN": "ไม่ทราบ",
+  "VOLUME": "ระดับเสียง"
+}
