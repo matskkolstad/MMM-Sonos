@@ -233,11 +233,22 @@ The module consists of the following files:
 - **`css/MMM-Sonos.css`** - All module styles including layout modes, animations, and themes
 
 ### Translations
-The module includes multilingual support:
-- **`translations/en.json`** - English translations
-- **`translations/nb.json`** - Norwegian Bokmål translations
+The module includes multilingual support for all 44 MagicMirror supported languages:
 
-Supported translation keys include error messages, playback states, and UI labels. Add your own language by creating a new JSON file in the `translations` folder and adding it to the `getTranslations()` method in `MMM-Sonos.js`.
+**Languages with translations:**
+- Afrikaans (af), Bulgarian (bg), Catalan (ca), Czech (cs), Chuvash (cv)
+- Welsh (cy), Danish (da), German (de), Greek (el), English (en)
+- Esperanto (eo), Spanish (es), Estonian (et), Finnish (fi), French (fr)
+- Frysk (fy), Galician (gl), Gujarati (gu), Hebrew (he), Hindi (hi)
+- Croatian (hr), Hungarian (hu), Indonesian (id), Icelandic (is), Italian (it)
+- Japanese (ja), Korean (ko), Lithuanian (lt), Malay (ms-my), Norwegian Bokmål (nb)
+- Dutch (nl), Norwegian Nynorsk (nn), Polish (pl), Portuguese (pt), Portuguese Brazilian (pt-br)
+- Romanian (ro), Russian (ru), Slovak (sk), Swedish (sv), Thai (th)
+- Klingon (tlh), Turkish (tr), Ukrainian (uk), Simplified Chinese (zh-cn), Traditional Chinese (zh-tw)
+
+**Note:** Translation files use English text as a fallback. Community contributions for accurate translations are welcome! Simply edit the appropriate JSON file in the `translations` folder.
+
+Supported translation keys include error messages, playback states, and UI labels.
 
 ### Assets
 - **`assets/tv-default.svg`** - Default TV icon for home theater sources
