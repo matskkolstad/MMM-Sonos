@@ -134,6 +134,16 @@ An example showing all available configuration options:
     showPlaybackSource: true,        // Show playback source icon (Spotify, Radio, Line-in, etc.)
     showProgress: true,              // Show progress bar and time for current track
     showVolume: true,                // Show volume level for each speaker/group
+
+    // Album art caching
+    cacheAlbumArt: true,             // Cache album art locally for faster loading on slow networks
+    albumArtCacheTTL: 2592000000,    // How long to keep cached images (ms). Common values:
+                                     //   30 days:  2592000000  (30 * 24 * 60 * 60 * 1000)
+                                     //   90 days:  7776000000  (90 * 24 * 60 * 60 * 1000)
+                                     //   120 days: 10368000000 (120 * 24 * 60 * 60 * 1000)
+                                     //   365 days: 31536000000 (365 * 24 * 60 * 60 * 1000)
+                                     //   0         = cache forever (never expire)
+    clearCacheOnStart: false,        // Delete all cached album art on every module start
     
     // TV source configuration
     showTvSource: true,              // Show TV badge when TV input is active
@@ -197,6 +207,9 @@ Restart MagicMirror² afterwards to load the latest code.
 | `showPlaybackSource` | `true` | Display the playback source icon and label (Spotify, Radio, Line-in, etc.). Icons automatically adjust based on the source. |
 | `showProgress` | `true` | Show a progress bar and time counter for the current track. Only displayed when track position and duration information is available. |
 | `showVolume` | `true` | Display the current volume level with an icon that changes based on volume (muted, low, medium, high). |
+| `cacheAlbumArt` | `true` | Download and cache album art images locally so they load instantly on subsequent polls. Cached files are stored in `<module>/cache/album-art/` and served by MagicMirror's built-in static file server. |
+| `albumArtCacheTTL` | `2592000000` | How long (in milliseconds) to keep a cached image before re-downloading it. Set to `0` to cache images forever and never expire them. Common values: 30 days = `2592000000`, 90 days = `7776000000`, 120 days = `10368000000`, 365 days = `31536000000`. |
+| `clearCacheOnStart` | `false` | When `true`, all locally cached album art images are deleted every time the module starts. Useful after a config change or to reclaim disk space. |
 | `showTvSource` | `true` | Show a TV badge when a home-theater input (TV) is active. |
 | `showTvIcon` | `true` | Display a TV icon in the album-art slot when TV is active. Set to `false` to keep the placeholder without the icon. |
 | `tvIconMode` | `'emoji'` | Choose the TV icon type: `'emoji'` (default), `'text'`, or `'svg'`. |
@@ -219,6 +232,18 @@ Restart MagicMirror² afterwards to load the latest code.
 - **HTTPS-friendly album art:** Set `forceHttps: true` when your mirror runs behind an HTTPS proxy and browsers block mixed content.
 - **Responsive layout:** The row and grid layouts adapt to smaller displays and switch orientation whenever needed.
 - **Snappy updates:** Polling combined with caching keeps the UI fresh without noticeable lag.
+- **Local album art cache:** Album art images are downloaded once and served from disk on subsequent polls, giving instant display even on slow networks. See the `cacheAlbumArt`, `albumArtCacheTTL`, and `clearCacheOnStart` options above.
+
+### Clearing the album art cache
+
+There are three ways to clear the cached album art images:
+
+1. **On the next restart** — set `clearCacheOnStart: true` in your config, restart MagicMirror, then set it back to `false`.
+2. **From the browser console** — open the browser console on your mirror and run:
+   ```javascript
+   MM.getModules().withClass('MMM-Sonos')[0].clearAlbumArtCache()
+   ```
+3. **Manually** — delete the `modules/MMM-Sonos/cache/album-art/` directory and restart MagicMirror.
 
 ## Module Structure
 

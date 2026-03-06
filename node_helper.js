@@ -10,7 +10,7 @@ const https = require('node:https');
 const http = require('node:http');
 
 const MAX_REDIRECTS = 5;
-const DEFAULT_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+const DEFAULT_CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
 
 module.exports = NodeHelper.create({
   start() {
@@ -42,6 +42,10 @@ module.exports = NodeHelper.create({
       case 'SONOS_REQUEST':
         this._refresh();
         break;
+      case 'SONOS_CLEAR_CACHE':
+        this._clearAlbumArtCache();
+        this.sendSocketNotification('SONOS_CACHE_CLEARED', { timestamp: Date.now() });
+        break;
     }
   },
 
@@ -64,7 +68,8 @@ module.exports = NodeHelper.create({
         tvLabel: null,
         debug: false,
         cacheAlbumArt: true,
-        albumArtCacheTTL: DEFAULT_CACHE_TTL
+        albumArtCacheTTL: DEFAULT_CACHE_TTL,
+        clearCacheOnStart: false
       },
       config
     );
@@ -79,7 +84,11 @@ module.exports = NodeHelper.create({
     await this._discover();
 
     if (this.config.cacheAlbumArt) {
-      this._cleanupCache();
+      if (this.config.clearCacheOnStart) {
+        this._clearAlbumArtCache();
+      } else {
+        this._cleanupCache();
+      }
     }
 
     if (!this.updateTimer) {
@@ -617,7 +626,14 @@ module.exports = NodeHelper.create({
       return;
     }
 
-    const ttl = this.config.albumArtCacheTTL || DEFAULT_CACHE_TTL;
+    // A TTL of exactly 0 means "cache forever" — skip cleanup entirely
+    const ttl = this.config.albumArtCacheTTL;
+    if (ttl === 0) {
+      this.sendDebug('Album art cache TTL is 0 — skipping cleanup (cache forever)');
+      return;
+    }
+
+    const effectiveTtl = (ttl && ttl > 0) ? ttl : DEFAULT_CACHE_TTL;
     const now = Date.now();
 
     try {
@@ -626,8 +642,12 @@ module.exports = NodeHelper.create({
         const filePath = path.join(cacheDir, file);
         try {
           const stat = fs.statSync(filePath);
-          if (now - stat.mtimeMs > ttl) {
-            fs.unlink(filePath, () => {});
+          if (now - stat.mtimeMs > effectiveTtl) {
+            fs.unlink(filePath, (err) => {
+              if (err) {
+                this.sendDebug('Failed to delete expired cache file', file, err?.message || err);
+              }
+            });
             this.sendDebug('Removed expired cache file', file);
           }
         } catch (statError) {
@@ -636,6 +656,30 @@ module.exports = NodeHelper.create({
       }
     } catch (error) {
       this.sendDebug('Failed to clean up cache directory', error?.message || error);
+    }
+  },
+
+  _clearAlbumArtCache() {
+    this.albumArtCache.clear();
+    const cacheDir = this._getCacheDir();
+    if (!fs.existsSync(cacheDir)) {
+      return;
+    }
+
+    try {
+      const files = fs.readdirSync(cacheDir);
+      for (const file of files) {
+        const filePath = path.join(cacheDir, file);
+        try {
+          fs.unlinkSync(filePath);
+        } catch (err) {
+          this.sendDebug('Failed to delete cache file', file, err?.message || err);
+        }
+      }
+      this.sendDebug('Album art cache cleared', { filesRemoved: files.length });
+      Log.log(`[MMM-Sonos] Album art cache cleared (${files.length} file(s) removed)`);
+    } catch (error) {
+      this.sendDebug('Failed to clear cache directory', error?.message || error);
     }
   },
 

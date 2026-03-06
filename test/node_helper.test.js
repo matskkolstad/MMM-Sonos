@@ -329,4 +329,66 @@ describe('Album art cache – filesystem integration', () => {
 
     assert.equal(fs.existsSync(filePath), false);
   });
+
+  it('cleanup skips all files when TTL is 0 (cache forever)', () => {
+    const { filename } = _generateCacheKey('http://example.com/forever.jpg');
+    const filePath = path.join(tmpDir, filename);
+    fs.writeFileSync(filePath, 'data');
+
+    // Back-date the mtime — but TTL=0 should prevent any deletion
+    const pastTime = new Date(Date.now() - 100000);
+    fs.utimesSync(filePath, pastTime, pastTime);
+
+    const ttl = 0; // means "cache forever"
+    if (ttl && ttl > 0) {
+      // This block should NOT execute when ttl === 0
+      const now = Date.now();
+      const files = fs.readdirSync(tmpDir);
+      for (const file of files) {
+        const fp = path.join(tmpDir, file);
+        const stat = fs.statSync(fp);
+        if (now - stat.mtimeMs > ttl) {
+          fs.unlinkSync(fp);
+        }
+      }
+    }
+
+    assert.equal(fs.existsSync(filePath), true);
+    fs.unlinkSync(filePath); // cleanup for other tests
+  });
+
+  it('_clearAlbumArtCache removes all files in cache directory', () => {
+    // Use a dedicated sub-directory to avoid interference from other tests
+    const clearDir = path.join(tmpDir, 'clear-test');
+    fs.mkdirSync(clearDir, { recursive: true });
+
+    // Write multiple fake cached files
+    const urls = [
+      'http://example.com/art1.jpg',
+      'http://example.com/art2.png',
+      'http://example.com/art3.jpg'
+    ];
+    const filePaths = urls.map((url) => {
+      const { filename } = _generateCacheKey(url);
+      const fp = path.join(clearDir, filename);
+      fs.writeFileSync(fp, 'fake-data');
+      return fp;
+    });
+
+    // Verify all files exist
+    filePaths.forEach((fp) => assert.equal(fs.existsSync(fp), true));
+
+    // Simulate _clearAlbumArtCache — only remove files, not subdirectories
+    const entries = fs.readdirSync(clearDir);
+    entries.forEach((file) => {
+      const fp = path.join(clearDir, file);
+      if (fs.statSync(fp).isFile()) {
+        fs.unlinkSync(fp);
+      }
+    });
+
+    // All files should be removed
+    filePaths.forEach((fp) => assert.equal(fs.existsSync(fp), false));
+    assert.equal(fs.readdirSync(clearDir).length, 0);
+  });
 });

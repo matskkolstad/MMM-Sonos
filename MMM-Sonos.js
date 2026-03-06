@@ -41,7 +41,8 @@ Module.register('MMM-Sonos', {
     showProgress: true,
     showVolume: true,
     cacheAlbumArt: true,
-    albumArtCacheTTL: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
+    albumArtCacheTTL: 30 * 24 * 60 * 60 * 1000, // 30 days in milliseconds (0 = cache forever)
+    clearCacheOnStart: false,
     debug: false
   },
 
@@ -115,6 +116,10 @@ Module.register('MMM-Sonos', {
 
       case 'SONOS_DEBUG':
         this._log('[H]', payload);
+        break;
+
+      case 'SONOS_CACHE_CLEARED':
+        this._log('Album art cache cleared', payload);
         break;
     }
   },
@@ -661,6 +666,15 @@ Module.register('MMM-Sonos', {
     if (this.config.debug) {
       console.log('[MMM-Sonos]', ...args);
     }
+  },
+
+  /**
+   * Clears the local album art cache.
+   * Can be called from the browser console:
+   *   MM.getModules().withClass('MMM-Sonos')[0].clearAlbumArtCache()
+   */
+  clearAlbumArtCache() {
+    this.sendSocketNotification('SONOS_CLEAR_CACHE');
   },
 
   _renderSourceLabel(alignment) {

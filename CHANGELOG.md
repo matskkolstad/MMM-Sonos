@@ -10,11 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Album art local caching** - Album art images are now downloaded and cached locally for faster loading on slower networks (#)
   - New `cacheAlbumArt` config option (default: `true`) to enable/disable caching
-  - New `albumArtCacheTTL` config option (default: 7 days in ms) to control how long cached files are kept
+  - New `albumArtCacheTTL` config option (default: 30 days) — set to `0` to cache forever (no expiry)
+  - New `clearCacheOnStart` config option (default: `false`) — wipes all cached images on module start
   - Cache is stored in `<module>/cache/album-art/` (auto-created, gitignored)
   - Files are served from `/modules/MMM-Sonos/cache/album-art/` by MagicMirror's static file server
   - Automatic cache cleanup removes files older than the configured TTL on every startup
+  - `albumArtCacheTTL: 0` keeps images cached forever and skips cleanup entirely
   - Falls back gracefully to the original URL if caching fails
+  - Support for on-demand cache clearing via `SONOS_CLEAR_CACHE` socket notification
+  - Public `clearAlbumArtCache()` method callable from the browser console
 - **Unit test suite** - Added test infrastructure using Node.js built-in `node:test` runner
   - Tests cover `_pick`, `_parseTimeToSeconds`, `_normalizeArt`, `_generateCacheKey`, `_isTvTrack`, `_detectSource`, and filesystem cache logic (39 tests)
   - Run with `npm test`
