@@ -4,6 +4,13 @@ const NodeHelper = require('node_helper');
 const Log = require('logger');
 const { AsyncDeviceDiscovery, Sonos } = require('sonos');
 const path = require('node:path');
+const fs = require('node:fs');
+const nodeCrypto = require('node:crypto');
+const https = require('node:https');
+const http = require('node:http');
+
+const MAX_REDIRECTS = 5;
+const DEFAULT_CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
 
 module.exports = NodeHelper.create({
   start() {
@@ -13,6 +20,7 @@ module.exports = NodeHelper.create({
     this.updateTimer = null;
     this.isDiscovering = false;
     this.lastPayload = [];
+    this.albumArtCache = new Map(); // in-memory cache: url-hash → local filename
 
     const fallbackConfig = this._readConfigFromFile();
     if (fallbackConfig) {
@@ -34,6 +42,10 @@ module.exports = NodeHelper.create({
       case 'SONOS_REQUEST':
         this._refresh();
         break;
+      case 'SONOS_CLEAR_CACHE':
+        this._clearAlbumArtCache();
+        this.sendSocketNotification('SONOS_CACHE_CLEARED', { timestamp: Date.now() });
+        break;
     }
   },
 
@@ -54,7 +66,10 @@ module.exports = NodeHelper.create({
         showTvIcon: true,
         tvIcon: '📺',
         tvLabel: null,
-        debug: false
+        debug: false,
+        cacheAlbumArt: true,
+        albumArtCacheTTL: DEFAULT_CACHE_TTL,
+        clearCacheOnStart: false
       },
       config
     );
@@ -67,6 +82,14 @@ module.exports = NodeHelper.create({
 
     this._clearTimer();
     await this._discover();
+
+    if (this.config.cacheAlbumArt) {
+      if (this.config.clearCacheOnStart) {
+        this._clearAlbumArtCache();
+      } else {
+        this._cleanupCache();
+      }
+    }
 
     if (!this.updateTimer) {
       this.updateTimer = setInterval(() => this._refresh(), Math.max(this.config.updateInterval, 5000));
@@ -260,7 +283,10 @@ module.exports = NodeHelper.create({
           continue;
         }
 
-        const albumArt = this._normalizeArt(track?.albumArtURL || track?.absoluteAlbumArtURI, coordinator);
+        const albumArtRaw = this._normalizeArt(track?.albumArtURL || track?.absoluteAlbumArtURI, coordinator);
+        const albumArt = (this.config.cacheAlbumArt && albumArtRaw)
+          ? await this._cacheAlbumArt(albumArtRaw)
+          : albumArtRaw;
 
         // Get volume and position information
         let volume = null;
@@ -477,6 +503,184 @@ module.exports = NodeHelper.create({
       }
     }
     return null;
+  },
+
+  _getCacheDir() {
+    return path.join(__dirname, 'cache', 'album-art');
+  },
+
+  _ensureCacheDir() {
+    const dir = this._getCacheDir();
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  },
+
+  _generateCacheKey(url) {
+    const hash = nodeCrypto.createHash('sha256').update(url).digest('hex').slice(0, 24);
+    const urlPath = url.split('?')[0];
+    const extMatch = urlPath.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i);
+    const ext = extMatch ? extMatch[1].toLowerCase() : 'jpg';
+    return { hash, ext, filename: `${hash}.${ext}` };
+  },
+
+  async _cacheAlbumArt(url) {
+    if (!url || typeof url !== 'string') {
+      return url;
+    }
+
+    // Only cache HTTP/HTTPS URLs — skip data URIs or already-local URLs
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      return url;
+    }
+
+    try {
+      const { hash, filename } = this._generateCacheKey(url);
+      const localUrl = `/modules/MMM-Sonos/cache/album-art/${filename}`;
+
+      // Return cached result if already known in memory
+      if (this.albumArtCache.has(hash)) {
+        return localUrl;
+      }
+
+      this._ensureCacheDir();
+      const cachePath = path.join(this._getCacheDir(), filename);
+
+      // Check filesystem cache
+      if (fs.existsSync(cachePath)) {
+        this.albumArtCache.set(hash, filename);
+        return localUrl;
+      }
+
+      // Download and store
+      await this._downloadFile(url, cachePath);
+      this.albumArtCache.set(hash, filename);
+      this.sendDebug('Cached album art', { url, localUrl });
+      return localUrl;
+    } catch (error) {
+      this.sendDebug('Failed to cache album art, using original URL', url, error?.message || error);
+      return url;
+    }
+  },
+
+  _downloadFile(url, destPath) {
+    return new Promise((resolve, reject) => {
+      const tmpPath = `${destPath}.tmp`;
+      const file = fs.createWriteStream(tmpPath);
+
+      const doRequest = (requestUrl, redirectCount) => {
+        if (redirectCount > MAX_REDIRECTS) {
+          file.close();
+          fs.unlink(tmpPath, () => {});
+          reject(new Error('Too many redirects'));
+          return;
+        }
+
+        const protocol = requestUrl.startsWith('https://') ? https : http;
+        protocol.get(requestUrl, (response) => {
+          if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+            response.resume();
+            doRequest(response.headers.location, redirectCount + 1);
+            return;
+          }
+
+          if (response.statusCode !== 200) {
+            file.close();
+            fs.unlink(tmpPath, () => {});
+            reject(new Error(`HTTP ${response.statusCode}`));
+            return;
+          }
+
+          response.pipe(file);
+          file.on('finish', () => {
+            file.close(() => {
+              fs.rename(tmpPath, destPath, (err) => {
+                if (err) {
+                  fs.unlink(tmpPath, () => {});
+                  reject(err);
+                } else {
+                  resolve();
+                }
+              });
+            });
+          });
+          file.on('error', (err) => {
+            file.close();
+            fs.unlink(tmpPath, () => {});
+            reject(err);
+          });
+        }).on('error', (err) => {
+          file.close();
+          fs.unlink(tmpPath, () => {});
+          reject(err);
+        });
+      };
+
+      doRequest(url, 0);
+    });
+  },
+
+  _cleanupCache() {
+    const cacheDir = this._getCacheDir();
+    if (!fs.existsSync(cacheDir)) {
+      return;
+    }
+
+    // A TTL of exactly 0 means "cache forever" — skip cleanup entirely
+    const ttl = this.config.albumArtCacheTTL;
+    if (ttl === 0) {
+      this.sendDebug('Album art cache TTL is 0 — skipping cleanup (cache forever)');
+      return;
+    }
+
+    const effectiveTtl = (ttl && ttl > 0) ? ttl : DEFAULT_CACHE_TTL;
+    const now = Date.now();
+
+    try {
+      const files = fs.readdirSync(cacheDir);
+      for (const file of files) {
+        const filePath = path.join(cacheDir, file);
+        try {
+          const stat = fs.statSync(filePath);
+          if (now - stat.mtimeMs > effectiveTtl) {
+            fs.unlink(filePath, (err) => {
+              if (err) {
+                this.sendDebug('Failed to delete expired cache file', file, err?.message || err);
+              }
+            });
+            this.sendDebug('Removed expired cache file', file);
+          }
+        } catch (statError) {
+          this.sendDebug('Failed to stat cache file', file, statError?.message || statError);
+        }
+      }
+    } catch (error) {
+      this.sendDebug('Failed to clean up cache directory', error?.message || error);
+    }
+  },
+
+  _clearAlbumArtCache() {
+    this.albumArtCache.clear();
+    const cacheDir = this._getCacheDir();
+    if (!fs.existsSync(cacheDir)) {
+      return;
+    }
+
+    try {
+      const files = fs.readdirSync(cacheDir);
+      for (const file of files) {
+        const filePath = path.join(cacheDir, file);
+        try {
+          fs.unlinkSync(filePath);
+        } catch (err) {
+          this.sendDebug('Failed to delete cache file', file, err?.message || err);
+        }
+      }
+      this.sendDebug('Album art cache cleared', { filesRemoved: files.length });
+      Log.log(`[MMM-Sonos] Album art cache cleared (${files.length} file(s) removed)`);
+    } catch (error) {
+      this.sendDebug('Failed to clear cache directory', error?.message || error);
+    }
   },
 
   _clearTimer() {

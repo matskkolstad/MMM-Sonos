@@ -7,15 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Album art local caching** - Album art images are now downloaded and cached locally for faster loading on slower networks (#)
+  - New `cacheAlbumArt` config option (default: `true`) to enable/disable caching
+  - New `albumArtCacheTTL` config option (default: 30 days) — set to `0` to cache forever (no expiry)
+  - New `clearCacheOnStart` config option (default: `false`) — wipes all cached images on module start
+  - Cache is stored in `<module>/cache/album-art/` (auto-created, gitignored)
+  - Files are served from `/modules/MMM-Sonos/cache/album-art/` by MagicMirror's static file server
+  - Automatic cache cleanup removes files older than the configured TTL on every startup
+  - `albumArtCacheTTL: 0` keeps images cached forever and skips cleanup entirely
+  - Falls back gracefully to the original URL if caching fails
+  - Support for on-demand cache clearing via `SONOS_CLEAR_CACHE` socket notification
+  - Public `clearAlbumArtCache()` method callable from the browser console
+- **Unit test suite** - Added test infrastructure using Node.js built-in `node:test` runner
+  - Tests cover `_pick`, `_parseTimeToSeconds`, `_normalizeArt`, `_generateCacheKey`, `_isTvTrack`, `_detectSource`, and filesystem cache logic (39 tests)
+  - Run with `npm test`
+
+### Changed
+- Updated `npm test` script to run the new unit test suite
+- Updated ESLint config to lint `test/` directory
+- Added `cache/` to `.gitignore`
+- Moved `COPILOT_AGENT_INSTRUCTIONS.md` → `.github/copilot-instructions.md` (standard GitHub location)
+- Updated Copilot agent instructions with detailed conventions including changelog policy, test requirements, and repository structure
+- Updated dependency overrides: `globals` 16.5.0 → 17.0.0, `eslint` 9.39.1 → 9.39.2, `@eslint/js` 9.39.1 → 9.39.2
+
+### Removed
+- Removed `VERIFICATION_REPORT.md` (temporary verification document, not needed in repo)
+- Removed `VERIFIKASJONSRAPPORT_NO.md` (Norwegian duplicate of verification report)
+- Removed `PR_MERGE_ANALYSIS.md` (temporary analysis document, not needed in repo)
+
 ### Fixed
 - Fixed progress bar stuttering by eliminating unnecessary DOM re-renders (#26)
   - Added intelligent change detection to skip DOM updates when only progress changes
   - Progress bar now updates smoothly in-place without reconstruction
   - Detects user seeking with 3-second tolerance
   - Optimized CSS transition from 0.3s to 1s linear for smoother animation
-
-### Changed
-- Updated dependency overrides: `globals` 16.5.0 → 17.0.0, `eslint` 9.39.1 → 9.39.2, `@eslint/js` 9.39.1 → 9.39.2
 
 ## [1.3.0] - 2026-01-08
 

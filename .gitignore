@@ -11,3 +11,4 @@ pnpm-debug.log*
 dist/
 coverage/
 test-demo.html
+cache/

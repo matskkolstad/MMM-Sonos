@@ -5,8 +5,8 @@
   "main": "MMM-Sonos.js",
   "scripts": {
     "start": "node node_helper.js",
-    "test": "echo \"No tests are defined\"",
-    "lint": "eslint *.js",
+    "test": "node --test test/**/*.test.js",
+    "lint": "eslint *.js test/*.js",
     "audit": "npm audit"
   },
   "keywords": [

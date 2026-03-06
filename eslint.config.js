@@ -37,5 +37,15 @@ module.exports = [
         Module: 'readonly'
       }
     }
+  },
+  {
+    files: ['test/**/*.test.js'],
+    languageOptions: {
+      ecmaVersion: 2021,
+      sourceType: 'commonjs',
+      globals: {
+        ...globals.node
+      }
+    }
   }
 ];
