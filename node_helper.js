@@ -630,8 +630,8 @@ module.exports = NodeHelper.create({
       return null;
     }
 
-    // Handle special values like "NOT_IMPLEMENTED"
-    if (timeString === 'NOT_IMPLEMENTED' || timeString === '0:00:00') {
+    // NOT_IMPLEMENTED means the device does not support position tracking (e.g. radio)
+    if (timeString === 'NOT_IMPLEMENTED') {
       return null;
     }
 

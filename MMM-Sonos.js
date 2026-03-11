@@ -385,6 +385,8 @@ Module.register('MMM-Sonos', {
       }
 
       const img = document.createElement('img');
+      // Use eager loading: on a MagicMirror display every card is always visible,
+      // so lazy loading only delays the image; eager gives instant display.
       img.loading = 'eager';
       img.src = group.albumArt;
       img.alt = `${group.title || ''}`.trim() || 'Album art';
@@ -564,9 +566,10 @@ Module.register('MMM-Sonos', {
       }
     }
 
-    // Progress indicator
-    if (this.config.showProgress && group.position != null && group.duration != null && group.duration > 0) {
-      const progressElement = this._renderProgress(group.position, group.duration, alignment);
+    // Progress indicator — show when duration is known and positive.
+    // Treat a null position (e.g. track freshly started, RelTime not yet available) as 0.
+    if (this.config.showProgress && group.duration != null && group.duration > 0) {
+      const progressElement = this._renderProgress(group.position ?? 0, group.duration, alignment);
       if (progressElement) {
         content.appendChild(progressElement);
       }
@@ -1226,6 +1229,8 @@ Module.register('MMM-Sonos', {
     art.style.height = sizeValue;
     if (group.albumArt) {
       const img = document.createElement('img');
+      // Use eager loading: on a MagicMirror display every card is always visible,
+      // so lazy loading only delays the image; eager gives instant display.
       img.loading = 'eager';
       img.src = group.albumArt;
       img.alt = '';
@@ -1278,29 +1283,33 @@ Module.register('MMM-Sonos', {
 
     // Update the dataset of existing progress bars without re-rendering
     newGroups.forEach((group) => {
-      if (!group.position || !group.duration || group.duration <= 0) {
+      // Skip groups with no known duration (radio streams, TV, etc.)
+      if (group.duration == null || group.duration <= 0) {
         return;
       }
 
-      // Find the progress elements for this group
-      const groupElement = document.querySelector(`.mmm-sonos__group[data-group-id="${group.id}"]`);
+      // Find the progress elements for this group.
+      // Use an attribute-only selector so it matches both .mmm-sonos__group (row/grid)
+      // and .mmm-sonos__mini-group (mini mode) elements.
+      const groupElement = document.querySelector(`[data-group-id="${group.id}"]`);
       if (!groupElement) {
         return;
       }
+
+      // Treat null position (track at 0:00:00) as 0
+      const safePosition = group.position ?? 0;
 
       const progressBar = groupElement.querySelector('.mmm-sonos__progress-bar');
       const timeDisplay = groupElement.querySelector('.mmm-sonos__progress-time');
 
       if (progressBar) {
-        // Update the dataset with new server position
-        progressBar.dataset.initialPosition = group.position;
+        progressBar.dataset.initialPosition = safePosition;
         progressBar.dataset.duration = group.duration;
         progressBar.dataset.timestamp = newTimestamp;
       }
 
       if (timeDisplay) {
-        // Update the dataset with new server position
-        timeDisplay.dataset.initialPosition = group.position;
+        timeDisplay.dataset.initialPosition = safePosition;
         timeDisplay.dataset.duration = group.duration;
         timeDisplay.dataset.timestamp = newTimestamp;
       }

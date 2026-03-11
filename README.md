@@ -146,7 +146,8 @@ An example showing all available configuration options:
     albumArtColorsMode: 'gradient',  // 'gradient' (left→dark) or 'solid' (flat colour block)
 
     // Track-change transition animations
-    transitionAnimation: 'fade',     // 'fade', 'slide-up', 'slide-down', 'scale', or 'none'
+    transitionAnimation: 'fade',     // 'fade', 'slide-up', 'slide-down', 'slide-left', 'slide-right',
+                                     // 'scale', 'zoom-in', 'zoom-out', 'flip', 'pixelate', or 'none'
     transitionDuration: 400,         // Animation duration in milliseconds
 
     // Mini-mode options (displayMode: 'mini')
@@ -233,7 +234,7 @@ Restart MagicMirror² afterwards to load the latest code.
 | `albumArtColors` | `false` | Extract the dominant colour from each group's cached album art and apply it as a tinted gradient background on the card. Requires `cacheAlbumArt: true`. Uses [node-vibrant](https://github.com/Vibrant-Colors/node-vibrant) under the hood. |
 | `albumArtColorsOpacity` | `0.45` | Opacity of the accent-colour overlay (0.0–1.0). Increase for a stronger tint. |
 | `albumArtColorsMode` | `'gradient'` | `'gradient'` fades the accent colour into a dark background; `'solid'` applies a flat colour block. |
-| `transitionAnimation` | `'fade'` | Animation used when a track changes: `'fade'`, `'slide-up'`, `'slide-down'`, `'scale'`, or `'none'`. |
+| `transitionAnimation` | `'fade'` | Animation used when a track changes: `'fade'`, `'slide-up'`, `'slide-down'`, `'slide-left'`, `'slide-right'`, `'scale'`, `'zoom-in'`, `'zoom-out'`, `'flip'`, `'pixelate'`, or `'none'`. Only the card whose track actually changed is animated — all other cards stay static. |
 | `transitionDuration` | `400` | Duration of the track-change animation in milliseconds. |
 | `miniAlbumArtSize` | `40` | Thumbnail size in pixels for cards in `mini` mode. |
 | `miniShowGroupName` | `true` | Show the room/group name as a small badge in `mini` mode. |
@@ -258,6 +259,48 @@ Restart MagicMirror² afterwards to load the latest code.
 - **Text:** `tvIconMode: 'text'` with `tvIconText: 'TV'` (or another string). The text scales to `albumArtSize`.
 - **SVG:** `tvIconMode: 'svg'` with `tvIconSvgPath` pointing to the SVG file. You can place your file inside this module at `modules/MMM-Sonos/assets/your-tv.svg` and set `tvIconSvgPath: 'assets/your-tv.svg'`. Remote URLs are also supported. If no path is provided, the bundled `assets/tv-default.svg` is used.
 - **Hide icon:** set `showTvIcon: false` to keep the album-art placeholder without an icon.
+
+### Mini mode
+
+`displayMode: 'mini'` renders each playing group as a compact single-line row — ideal for placing the module in a corner without taking up much screen space.
+
+**Example configuration:**
+
+```javascript
+{
+  module: 'MMM-Sonos',
+  position: 'top_right',
+  config: {
+    displayMode: 'mini',
+    miniAlbumArtSize: 40,       // thumbnail size in px (default 40)
+    miniShowGroupName: true,    // show room name badge above the title
+    miniShowArtist: true,       // append " · Artist" to the title line
+    miniShowSource: false,      // show source label (Spotify, Radio, …)
+    miniWidth: 320,             // optional: max width of each row in px
+    transitionAnimation: 'fade' // animation when a track changes
+  }
+}
+```
+
+Each row shows:
+- **Thumbnail** — small square album art (or a placeholder if none available)
+- **Room badge** — the speaker/group name (e.g. "Stue"), when `miniShowGroupName: true`
+- **Track line** — title, optionally followed by `· Artist` when `miniShowArtist: true`
+- **Source label** — e.g. "Spotify", "Radio", when `miniShowSource: true`
+
+> **Note:** Mini mode does not display the progress bar, volume level, or individual group member names, keeping the layout as compact as possible.
+
+> **Tip:** Use `allowedSpeakers` or `allowedGroups` to limit which rooms are shown, and `hiddenSpeakers` / `hiddenGroups` to exclude specific rooms.
+
+**Mini mode option reference:**
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `miniAlbumArtSize` | `40` | Thumbnail size in pixels. |
+| `miniShowGroupName` | `true` | Show a small uppercase badge with the room/group name above the track title. |
+| `miniShowArtist` | `true` | Append `· Artist` after the track title on the same line. |
+| `miniShowSource` | `false` | Show a small label below the title indicating the playback source (Spotify, Apple Music, Radio, etc.). |
+| `miniWidth` | `null` | Set a maximum pixel width for each mini row (e.g. `320` or `'320px'`). Useful when placing the module in a narrow sidebar. |
 
 ## Additional features
 

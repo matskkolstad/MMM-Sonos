@@ -65,6 +65,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Detects user seeking with 3-second tolerance
 - Fixed spurious animations when only volume changes (e.g. automated volume adjustments)
 - Fixed all speakers animating when only one speaker's track changes in row/grid mode
+- Fixed progress bar not appearing when a track first starts (position reported as `0:00:00`)
+  - `_parseTimeToSeconds('0:00:00')` now correctly returns `0` instead of `null`; only `NOT_IMPLEMENTED` (no position support) returns `null`
+  - `_renderGroup` now shows the progress bar as long as `duration > 0`, even when `position` is `null` or `0`
+  - `_updateProgressDataFromServer` now updates the bar dataset for `position = 0` and uses a class-agnostic selector so it works in both regular and mini display modes
 
 ## [1.3.0] - 2026-01-08
 
