@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "Rádio",
   "SOURCE_LINE_IN": "Linkový vstup",
   "SOURCE_UNKNOWN": "Neznámý",
-  "VOLUME": "Hlasitost"
+  "VOLUME": "Hlasitost",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }

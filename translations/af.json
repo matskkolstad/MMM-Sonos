@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "Radio",
   "SOURCE_LINE_IN": "Lyn-ingang",
   "SOURCE_UNKNOWN": "Onbekend",
-  "VOLUME": "Volume"
+  "VOLUME": "Volume",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }

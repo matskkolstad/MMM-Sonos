@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "วิทยุ",
   "SOURCE_LINE_IN": "ไลน์อิน",
   "SOURCE_UNKNOWN": "ไม่ทราบ",
-  "VOLUME": "ระดับเสียง"
+  "VOLUME": "ระดับเสียง",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }

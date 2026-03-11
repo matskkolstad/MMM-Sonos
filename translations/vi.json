@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "Radio",
   "SOURCE_LINE_IN": "Đầu vào dòng",
   "SOURCE_UNKNOWN": "Không xác định",
-  "VOLUME": "Âm lượng"
+  "VOLUME": "Âm lượng",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }

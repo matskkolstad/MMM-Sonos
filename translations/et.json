@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "Raadio",
   "SOURCE_LINE_IN": "Liinisisend",
   "SOURCE_UNKNOWN": "Teadmata",
-  "VOLUME": "Helitugevus"
+  "VOLUME": "Helitugevus",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }

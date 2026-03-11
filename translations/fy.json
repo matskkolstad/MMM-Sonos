@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "Radio",
   "SOURCE_LINE_IN": "Line-yn",
   "SOURCE_UNKNOWN": "Unbekend",
-  "VOLUME": "Folume"
+  "VOLUME": "Folume",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }

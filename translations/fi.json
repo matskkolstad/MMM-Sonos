@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "Radio",
   "SOURCE_LINE_IN": "Linjatulon",
   "SOURCE_UNKNOWN": "Tuntematon",
-  "VOLUME": "Äänenvoimakkuus"
+  "VOLUME": "Äänenvoimakkuus",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }

@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "Radio",
   "SOURCE_LINE_IN": "Masukan baris",
   "SOURCE_UNKNOWN": "Tidak diketahui",
-  "VOLUME": "Kelantangan"
+  "VOLUME": "Kelantangan",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }

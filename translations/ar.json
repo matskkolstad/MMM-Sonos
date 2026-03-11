@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "راديو",
   "SOURCE_LINE_IN": "مدخل خطي",
   "SOURCE_UNKNOWN": "غير معروف",
-  "VOLUME": "مستوى الصوت"
+  "VOLUME": "مستوى الصوت",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }

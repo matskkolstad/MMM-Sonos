@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "ラジオ",
   "SOURCE_LINE_IN": "ライン入力",
   "SOURCE_UNKNOWN": "不明",
-  "VOLUME": "音量"
+  "VOLUME": "音量",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }

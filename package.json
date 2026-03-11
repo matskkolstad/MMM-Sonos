@@ -26,6 +26,7 @@
   "homepage": "https://github.com/matskkolstad/MMM-Sonos#readme",
   "license": "MIT",
   "dependencies": {
+    "node-vibrant": "^4.0.4",
     "sonos": "^1.14.3"
   },
   "overrides": {

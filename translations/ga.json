@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "Raidió",
   "SOURCE_LINE_IN": "Ionchur líne",
   "SOURCE_UNKNOWN": "Anaithnid",
-  "VOLUME": "Toirt"
+  "VOLUME": "Toirt",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }

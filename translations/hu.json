@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "Rádió",
   "SOURCE_LINE_IN": "Vonalbemenet",
   "SOURCE_UNKNOWN": "Ismeretlen",
-  "VOLUME": "Hangerő"
+  "VOLUME": "Hangerő",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }

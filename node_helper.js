@@ -8,6 +8,7 @@ const fs = require('node:fs');
 const nodeCrypto = require('node:crypto');
 const https = require('node:https');
 const http = require('node:http');
+const { Vibrant } = require('node-vibrant/node');
 
 const MAX_REDIRECTS = 5;
 const DEFAULT_CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
@@ -21,6 +22,7 @@ module.exports = NodeHelper.create({
     this.isDiscovering = false;
     this.lastPayload = [];
     this.albumArtCache = new Map(); // in-memory cache: url-hash → local filename
+    this.accentColorCache = new Map(); // in-memory cache: filename → { r, g, b } | null
 
     const fallbackConfig = this._readConfigFromFile();
     if (fallbackConfig) {
@@ -284,9 +286,108 @@ module.exports = NodeHelper.create({
         }
 
         const albumArtRaw = this._normalizeArt(track?.albumArtURL || track?.absoluteAlbumArtURI, coordinator);
-        const albumArt = (this.config.cacheAlbumArt && albumArtRaw)
-          ? await this._cacheAlbumArt(albumArtRaw)
-          : albumArtRaw;
+
+        // For radio: currentTrack() often returns null for all metadata fields.
+        // Fetch GetMediaInfo() which carries the station name and logo in DIDL-Lite XML,
+        // and GetPositionInfo().TrackMetaData which may carry a live "now playing" string.
+        const isRadioSource = source === 'radio';
+        let mediaInfoTitle = null;
+        let mediaInfoArtUri = null;
+        let streamContent = null;
+
+        if (isRadioSource) {
+          try {
+            const avt = coordinator.avTransportService();
+            const [mediaInfo, posInfo] = await Promise.all([
+              avt.GetMediaInfo().catch(() => null),
+              avt.GetPositionInfo().catch(() => null)
+            ]);
+
+            if (mediaInfo?.CurrentURIMetaData) {
+              mediaInfoTitle = this._parseDIDL(mediaInfo.CurrentURIMetaData, 'dc:title');
+              const rawArtUri = this._parseDIDL(mediaInfo.CurrentURIMetaData, 'upnp:albumArtURI');
+              if (rawArtUri) {
+                mediaInfoArtUri = this._normalizeArt(rawArtUri, coordinator);
+              }
+            }
+
+            if (posInfo?.TrackMetaData) {
+              const raw = this._parseDIDL(posInfo.TrackMetaData, 'r:streamContent');
+              if (raw && raw.trim()) {
+                streamContent = raw.trim();
+              }
+            }
+
+            this.sendDebug('AVTransport MediaInfo parsed', { mediaInfoTitle, mediaInfoArtUri, streamContent });
+          } catch (mediaError) {
+            this.sendDebug('Failed to fetch MediaInfo for radio', mediaError?.message || mediaError);
+          }
+        }
+
+        // Best art: track-reported > DIDL from MediaInfo > /getaa fallback
+        const radioArtFallback = (isRadioSource && !albumArtRaw && !mediaInfoArtUri && track?.uri)
+          ? this._buildRadioArtUrl(track.uri, coordinator)
+          : null;
+
+        const effectiveArtRaw = albumArtRaw || mediaInfoArtUri || radioArtFallback;
+        const albumArt = (this.config.cacheAlbumArt && effectiveArtRaw)
+          ? await this._cacheAlbumArt(effectiveArtRaw)
+          : effectiveArtRaw;
+
+        // Log the full raw track object in debug mode
+        if (this.config.debug) {
+          Log.log(`[MMM-Sonos] Raw track object: ${JSON.stringify(track)}`);
+        }
+
+        // Station name: DIDL title is most reliable, then fall back to track fields
+        const stationName =
+          mediaInfoTitle ||
+          track?.stationName ||
+          track?.album ||
+          track?.albumArtist ||
+          null;
+        const streamTitle = track?.streamTitle || streamContent || null;
+
+        // Determine display title and artist depending on source type
+        let displayTitle;
+        let displayArtist;
+        if (isTvSource) {
+          displayTitle = 'TV';
+          displayArtist = null;
+        } else if (isRadioSource) {
+          // track.title for a radio stream is often a raw URI or empty — prefer stationName
+          const rawTitle = track?.title || '';
+          const titleIsUseless =
+            !rawTitle ||
+            /^https?:\/\//i.test(rawTitle) ||
+            /^x-sonosapi/i.test(rawTitle) ||
+            /^aac:/i.test(rawTitle) ||
+            /^hls-radio:/i.test(rawTitle) ||
+            /^x-rincon/i.test(rawTitle);
+          // Priority: stationName (from DIDL) > usable rawTitle > streamTitle > 'Radio'
+          displayTitle = stationName || (titleIsUseless ? (streamTitle || 'Radio') : rawTitle);
+          // streamTitle / streamContent (e.g. "Sigrid – Burning Bridges") as artist line
+          displayArtist =
+            track?.artist ||
+            (streamTitle && streamTitle !== displayTitle ? streamTitle : null);
+        } else {
+          displayTitle = track?.title || null;
+          displayArtist = track?.artist || null;
+        }
+
+        this.sendDebug('Radio metadata', {
+          source,
+          rawTitle: track?.title,
+          stationName,
+          streamTitle,
+          mediaInfoTitle,
+          mediaInfoArtUri,
+          streamContent,
+          albumArtURL: track?.albumArtURL,
+          radioArtFallback,
+          displayTitle,
+          displayArtist
+        });
 
         // Get volume and position information
         let volume = null;
@@ -309,17 +410,29 @@ module.exports = NodeHelper.create({
           this.sendDebug('Failed to fetch position info', name || id, error?.message || error);
         }
 
+        // Extract dominant accent color from locally cached album art when enabled
+        let accentColor = null;
+        if (this.config.albumArtColors && albumArt && albumArt.startsWith('/modules/')) {
+          const artFilename = albumArt.split('/').pop();
+          const artFilePath = path.join(this._getCacheDir(), artFilename);
+          accentColor = await this._extractAccentColor(artFilePath);
+        }
+
         const coordinatorName = await this._inferCoordinatorName(coordinator);
         formatted.push({
           id: id || coordinator.uuid || coordinator.host,
           name: name || coordinatorName || 'Sonos',
+          coordinatorHost: coordinator.host || null,
           playbackState: state,
-          title: track?.title || (isTvSource ? 'TV' : null),
-          artist: track?.artist || null,
+          title: displayTitle,
+          artist: displayArtist,
           album: track?.album || null,
           albumArt,
+          accentColor,
           source,
           isTvSource,
+          stationName,
+          streamTitle,
           volume,
           position,
           duration,
@@ -395,6 +508,34 @@ module.exports = NodeHelper.create({
     return `${proto}://${host}:${port}${uri.startsWith('/') ? uri : `/${uri}`}`;
   },
 
+  // Parse a single element value from a DIDL-Lite XML string.
+  // e.g. _parseDIDL(xml, 'dc:title') → 'NRK P3'
+  _parseDIDL(xml, element) {
+    if (!xml || typeof xml !== 'string') {
+      return null;
+    }
+    // Match both <ns:tag>value</ns:tag> and <tag>value</tag>
+    const tag = element.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = xml.match(new RegExp(`<${tag}[^>]*>([^<]*)<\/${tag}>`, 'i'));
+    if (!match) {
+      return null;
+    }
+    const value = match[1].trim();
+    return value || null;
+  },
+
+  // Build the Sonos device's /getaa URL which returns the station logo for radio streams.
+  // This works for most services where Sonos stores artwork locally.
+  _buildRadioArtUrl(streamUri, coordinator) {
+    if (!streamUri || !coordinator?.host) {
+      return null;
+    }
+    const proto = this.config.forceHttps ? 'https' : 'http';
+    const host = coordinator.host;
+    const port = coordinator.port || 1400;
+    return `${proto}://${host}:${port}/getaa?s=1&u=${encodeURIComponent(streamUri)}`;
+  },
+
   _detectSource(track) {
     if (!track || typeof track !== 'object') {
       return null;
@@ -404,22 +545,43 @@ module.exports = NodeHelper.create({
       return 'tv';
     }
 
+    // Check URI patterns first — more reliable than track.type which may be generic (e.g. 'track')
+    const uri = (track.uri || '').toLowerCase();
+    if (uri) {
+      if (
+        uri.startsWith('x-sonosapi-stream:') ||
+        uri.startsWith('x-sonosapi-hls-static:') ||
+        uri.startsWith('x-sonosapi-hls:') ||
+        uri.startsWith('x-sonosapi-rtd:') ||
+        uri.startsWith('x-rincon-mp3radio:') ||
+        uri.startsWith('aac:') ||
+        uri.startsWith('hls-radio:') ||
+        uri.includes('x-sonosapi') ||
+        uri.includes('tunein') ||
+        uri.includes('radiotime') ||
+        uri.includes('/radio')
+      ) {
+        return 'radio';
+      }
+
+      if (uri.includes('spotify')) {
+        return 'spotify';
+      }
+
+      if (uri.includes('apple') || uri.startsWith('nds:music:') || uri.includes('applemusic')) {
+        return 'apple_music';
+      }
+    }
+
+    // Fall back to track.type only when it carries meaningful info (not generic 'track'/'audio')
     const type = (track.type || track.metadata?.type || '').toLowerCase();
-    if (type) {
+    if (type && type !== 'track' && type !== 'audio') {
       return type;
     }
 
-    const uri = (track.uri || '').toLowerCase();
-    if (!uri) {
-      return null;
-    }
-
-    if (uri.startsWith('x-sonosapi-stream:') || uri.includes('radio')) {
+    // A stationName being set is a strong additional indicator of a radio stream
+    if (track.stationName) {
       return 'radio';
-    }
-
-    if (uri.includes('spotify')) {
-      return 'spotify';
     }
 
     return null;
@@ -687,6 +849,37 @@ module.exports = NodeHelper.create({
     if (this.updateTimer) {
       clearInterval(this.updateTimer);
       this.updateTimer = null;
+    }
+  },
+
+  // Extract the dominant accent colour from a local album-art image file using node-vibrant.
+  // Results are cached in memory (keyed by filename) to avoid re-processing on every poll.
+  async _extractAccentColor(filePath) {
+    if (!filePath || !fs.existsSync(filePath)) {
+      return null;
+    }
+
+    const cacheKey = path.basename(filePath);
+    if (this.accentColorCache.has(cacheKey)) {
+      return this.accentColorCache.get(cacheKey);
+    }
+
+    try {
+      const palette = await Vibrant.from(filePath).getPalette();
+      // Priority: DarkVibrant (rich, dark) → Vibrant → DarkMuted → Muted
+      const swatch = palette.DarkVibrant || palette.Vibrant || palette.DarkMuted || palette.Muted;
+      if (!swatch) {
+        this.accentColorCache.set(cacheKey, null);
+        return null;
+      }
+      const color = { r: swatch.r, g: swatch.g, b: swatch.b };
+      this.accentColorCache.set(cacheKey, color);
+      this.sendDebug('Extracted accent color', { filePath: cacheKey, color });
+      return color;
+    } catch (error) {
+      this.sendDebug('Failed to extract accent color', filePath, error?.message || error);
+      this.accentColorCache.set(cacheKey, null);
+      return null;
     }
   },
 

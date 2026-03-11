@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "Radio",
   "SOURCE_LINE_IN": "Līnijas ieeja",
   "SOURCE_UNKNOWN": "Nezināms",
-  "VOLUME": "Skaļums"
+  "VOLUME": "Skaļums",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }

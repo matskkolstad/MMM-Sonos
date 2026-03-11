@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "Радіо",
   "SOURCE_LINE_IN": "Лінійний вхід",
   "SOURCE_UNKNOWN": "Невідомо",
-  "VOLUME": "Гучність"
+  "VOLUME": "Гучність",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }

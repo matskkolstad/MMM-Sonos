@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "রেডিও",
   "SOURCE_LINE_IN": "লাইন-ইন",
   "SOURCE_UNKNOWN": "অজানা",
-  "VOLUME": "ভলিউম"
+  "VOLUME": "ভলিউম",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }

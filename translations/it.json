@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "Radio",
   "SOURCE_LINE_IN": "Ingresso linea",
   "SOURCE_UNKNOWN": "Sconosciuto",
-  "VOLUME": "Volume"
+  "VOLUME": "Volume",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }

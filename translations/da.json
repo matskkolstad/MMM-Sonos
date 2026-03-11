@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "Radio",
   "SOURCE_LINE_IN": "Linjeindgang",
   "SOURCE_UNKNOWN": "Ukendt",
-  "VOLUME": "Lydstyrke"
+  "VOLUME": "Lydstyrke",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }

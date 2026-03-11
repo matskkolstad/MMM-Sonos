@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "Radio",
   "SOURCE_LINE_IN": "Mewnbwn llinell",
   "SOURCE_UNKNOWN": "Anhysbys",
-  "VOLUME": "Sain"
+  "VOLUME": "Sain",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }

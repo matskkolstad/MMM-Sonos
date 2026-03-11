@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "Radyo",
   "SOURCE_LINE_IN": "Hat girişi",
   "SOURCE_UNKNOWN": "Bilinmiyor",
-  "VOLUME": "Ses"
+  "VOLUME": "Ses",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }

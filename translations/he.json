@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "רדיו",
   "SOURCE_LINE_IN": "קו כניסה",
   "SOURCE_UNKNOWN": "לא ידוע",
-  "VOLUME": "עוצמת קול"
+  "VOLUME": "עוצמת קול",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }

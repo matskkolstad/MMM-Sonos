@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "Útvarp",
   "SOURCE_LINE_IN": "Línuinntak",
   "SOURCE_UNKNOWN": "Óþekkt",
-  "VOLUME": "Hljóðstyrkur"
+  "VOLUME": "Hljóðstyrkur",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }

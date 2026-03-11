@@ -43,7 +43,23 @@ Module.register('MMM-Sonos', {
     cacheAlbumArt: true,
     albumArtCacheTTL: 30 * 24 * 60 * 60 * 1000, // 30 days in milliseconds (0 = cache forever)
     clearCacheOnStart: false,
-    debug: false
+    debug: false,
+    // Accent colours extracted from album art (requires cacheAlbumArt: true)
+    albumArtColors: false,
+    albumArtColorsOpacity: 0.45,
+    albumArtColorsMode: 'gradient', // 'gradient' | 'solid'
+    // Track-change transition animations
+    transitionAnimation: 'fade', // 'fade' | 'slide-up' | 'slide-down' | 'scale' | 'none'
+    transitionDuration: 400,
+    // Mini-mode display options
+    miniAlbumArtSize: 40,
+    miniShowGroupName: true,
+    miniShowArtist: true,
+    miniShowSource: false,
+    miniWidth: null,          // max-width of the mini-mode wrapper, e.g. 400 or '400px'
+    // Whitelist: if non-empty only matching speakers/groups are shown (per-instance)
+    allowedSpeakers: [],      // e.g. ['Stue', 'Kjøkken'] — speaker/room names
+    allowedGroups: []         // e.g. group names or coordinator IPs
   },
 
   start() {
@@ -52,6 +68,7 @@ Module.register('MMM-Sonos', {
     this.lastUpdated = null;
     this.updateTimer = null;
     this.progressAnimationTimer = null;
+    this._animTransitionTimer = null;
 
   this._log('Starting MMM-Sonos module');
     this.sendSocketNotification('SONOS_CONFIG', this.config);
@@ -67,6 +84,10 @@ Module.register('MMM-Sonos', {
     if (this.progressAnimationTimer) {
       clearInterval(this.progressAnimationTimer);
       this.progressAnimationTimer = null;
+    }
+    if (this._animTransitionTimer) {
+      clearTimeout(this._animTransitionTimer);
+      this._animTransitionTimer = null;
     }
   },
 
@@ -88,21 +109,29 @@ Module.register('MMM-Sonos', {
       case 'SONOS_DATA': {
         const newGroups = payload.groups || [];
         const newTimestamp = payload.timestamp || Date.now();
-        
-        // Only update DOM if there are meaningful changes, not just progress updates
-        // Check this BEFORE updating this.groups and this.lastUpdated
-        const shouldUpdateDom = this._shouldUpdateDom(newGroups, newTimestamp);
-        
+
+        // Analyse what changed BEFORE updating this.groups / this.lastUpdated
+        const { needsFull, changedIds } = this._analyzeChanges(newGroups, newTimestamp);
+
         this.groups = newGroups;
         this.lastUpdated = newTimestamp;
         this.error = null;
-        
-        if (shouldUpdateDom) {
-          this._log('Content changed, updating DOM');
-          this.updateDom();
+
+        if (needsFull) {
+          this._log('Structural change — full DOM update');
+          this._animatedUpdateDom();
+        } else if (changedIds.size > 0) {
+          // Per-card DOM surgery is only stable in mini-mode (compact rows).
+          // In row/grid mode a full animated re-render is simpler and equally smooth.
+          if (this._resolveDisplayMode() === 'mini') {
+            this._log('Mini per-group track change', [...changedIds]);
+            this._animateGroupCards(changedIds, newGroups);
+          } else {
+            this._log('Per-group track change — full DOM update', [...changedIds]);
+            this._animatedUpdateDom();
+          }
         } else {
           this._log('Only progress changed, skipping DOM update');
-          // Update progress bars with new server data without re-rendering
           this._updateProgressDataFromServer(newGroups, newTimestamp);
         }
         break;
@@ -239,9 +268,10 @@ Module.register('MMM-Sonos', {
   wrapper.classList.add(`mmm-sonos--mode-${displayMode}`);
   this._applyLayoutMode(wrapper, displayMode, cardMinValue, gridColumns);
 
+    const isMiniMode = displayMode === 'mini';
     const groupsToRender = this.groups
       .slice(0, this.config.maxGroups)
-      .map((group) => this._renderGroup(group))
+      .map((group) => isMiniMode ? this._renderMiniGroup(group) : this._renderGroup(group))
       .filter(Boolean);
 
     if (!groupsToRender.length) {
@@ -324,6 +354,17 @@ Module.register('MMM-Sonos', {
       container.classList.add('mmm-sonos__group--paused');
     }
 
+    // Apply accent colour derived from album-art analysis (albumArtColors: true)
+    if (this.config.albumArtColors && group.accentColor) {
+      const { r, g, b } = group.accentColor;
+      container.style.setProperty('--mmm-sonos-card-accent-rgb', `${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}`);
+      container.style.setProperty('--mmm-sonos-card-accent-opacity', String(this.config.albumArtColorsOpacity ?? 0.45));
+      container.classList.add('mmm-sonos__group--accented');
+      if ((this.config.albumArtColorsMode || 'gradient').toLowerCase() === 'solid') {
+        container.classList.add('mmm-sonos__group--accented-solid');
+      }
+    }
+
     // Album art (or TV icon placeholder)
     const configuredSize = Number(this.config.albumArtSize);
     const sizeValue = !Number.isNaN(configuredSize) && configuredSize > 0 ? `${configuredSize}px` : null;
@@ -344,6 +385,10 @@ Module.register('MMM-Sonos', {
         img.style.width = sizeValue;
         img.style.height = sizeValue;
       }
+      // If the image fails to load (e.g. radio station logo not available), hide the wrapper
+      img.onerror = () => {
+        artWrapper.style.display = 'none';
+      };
       artWrapper.appendChild(img);
       container.appendChild(artWrapper);
     } else if (isTvSource) {
@@ -555,7 +600,7 @@ Module.register('MMM-Sonos', {
   },
 
   _resolveDisplayMode() {
-    if (['grid', 'row'].includes(this.config.displayMode)) {
+    if (['grid', 'row', 'mini'].includes(this.config.displayMode)) {
       return this.config.displayMode;
     }
     // auto mode: grid if more than columns else row
@@ -566,16 +611,44 @@ Module.register('MMM-Sonos', {
   _isHidden(group) {
     const byGroup = (this.config.hiddenGroups || []).map((g) => g.toLowerCase());
     const bySpeaker = (this.config.hiddenSpeakers || []).map((g) => g.toLowerCase());
+    const allowedGroups = (this.config.allowedGroups || []).map((g) => g.toLowerCase());
+    const allowedSpeakers = (this.config.allowedSpeakers || []).map((g) => g.toLowerCase());
 
+    // Blacklist — explicit hide by group id/name
     if (byGroup.includes((group.id || '').toLowerCase()) || byGroup.includes((group.name || '').toLowerCase())) {
       return true;
     }
 
-    if (!group.members) {
-      return false;
+    // Blacklist — hide if any member is in the hidden list
+    if (group.members && group.members.some((m) => bySpeaker.includes(m.toLowerCase()))) {
+      return true;
     }
 
-    return group.members.some((member) => bySpeaker.includes(member.toLowerCase()));
+    // Blacklist — hide by coordinator IP
+    if (group.coordinatorHost && bySpeaker.includes(group.coordinatorHost.toLowerCase())) {
+      return true;
+    }
+
+    // Whitelist — if allowedGroups is set, only show matching group names/IDs/IPs
+    if (allowedGroups.length > 0) {
+      const matchGroup =
+        allowedGroups.includes((group.id || '').toLowerCase()) ||
+        allowedGroups.includes((group.name || '').toLowerCase()) ||
+        (group.coordinatorHost && allowedGroups.includes(group.coordinatorHost.toLowerCase()));
+      if (!matchGroup) return true;
+    }
+
+    // Whitelist — if allowedSpeakers is set, only show groups whose members are ALL listed,
+    // or at least one member is listed (use any-match so a stereo pair is not blocked)
+    if (allowedSpeakers.length > 0) {
+      const hasAllowedMember =
+        group.members &&
+        group.members.some((m) => allowedSpeakers.includes(m.toLowerCase()));
+      const hostAllowed = group.coordinatorHost && allowedSpeakers.includes(group.coordinatorHost.toLowerCase());
+      if (!hasAllowedMember && !hostAllowed) return true;
+    }
+
+    return false;
   },
 
   _normalizeSize(value) {
@@ -613,6 +686,17 @@ Module.register('MMM-Sonos', {
       wrapper.style.gridTemplateColumns = `repeat(${columns}, minmax(${minWidth}, 1fr))`;
       wrapper.style.justifyItems = 'center';
       wrapper.style.gap = gapValue;
+    } else if (mode === 'mini') {
+      wrapper.style.display = 'flex';
+      wrapper.style.flexDirection = 'column';
+      wrapper.style.flexWrap = 'nowrap';
+      wrapper.style.gap = '0.3rem';
+      wrapper.style.overflowX = 'visible';
+      const miniW = this._normalizeSize(this.config.miniWidth);
+      if (miniW) {
+        wrapper.style.maxWidth = miniW;
+        wrapper.style.width = '100%';
+      }
     }
   },
 
@@ -736,6 +820,8 @@ Module.register('MMM-Sonos', {
     const sourceLower = source.toLowerCase();
     if (sourceLower.includes('spotify')) {
       label.innerText = this.translate('SOURCE_SPOTIFY');
+    } else if (sourceLower.includes('apple')) {
+      label.innerText = this.translate('SOURCE_APPLE_MUSIC');
     } else if (sourceLower.includes('radio') || sourceLower.includes('stream')) {
       label.innerText = this.translate('SOURCE_RADIO');
     } else if (sourceLower.includes('line') || sourceLower.includes('linein')) {
@@ -999,6 +1085,238 @@ Module.register('MMM-Sonos', {
 
     // Only position/progress has changed, no need to update DOM
     return false;
+  },
+
+  // Analyse what changed between the last known groups and the newly received groups.
+  // Returns { needsFull, changedIds } where:
+  //   needsFull  — true when a full re-render is required (structural change)
+  //   changedIds — Set of group IDs whose track/art/volume changed (no structural change)
+  _analyzeChanges(newGroups, newTimestamp) {
+    const none = { needsFull: false, changedIds: new Set() };
+
+    if (!this.groups || this.groups.length !== newGroups.length) {
+      return { needsFull: true, changedIds: new Set() };
+    }
+
+    if (newGroups.length === 0) {
+      return this.groups.length !== 0
+        ? { needsFull: true, changedIds: new Set() }
+        : none;
+    }
+
+    const oldGroupMap = new Map();
+    this.groups.forEach((g) => { if (g.id) oldGroupMap.set(g.id, g); });
+
+    const timeElapsed = this.lastUpdated ? (newTimestamp - this.lastUpdated) / 1000 : 0;
+    const changedIds = new Set();
+
+    for (const newGroup of newGroups) {
+      const oldGroup = oldGroupMap.get(newGroup.id);
+      if (!oldGroup) return { needsFull: true, changedIds: new Set() };
+
+      // Structural changes → full re-render
+      if (oldGroup.name !== newGroup.name ||
+          oldGroup.playbackState !== newGroup.playbackState ||
+          oldGroup.source !== newGroup.source) {
+        return { needsFull: true, changedIds: new Set() };
+      }
+
+      if (oldGroup.members?.length !== newGroup.members?.length) {
+        return { needsFull: true, changedIds: new Set() };
+      }
+      if (oldGroup.members && newGroup.members) {
+        for (let j = 0; j < oldGroup.members.length; j++) {
+          if (oldGroup.members[j] !== newGroup.members[j]) {
+            return { needsFull: true, changedIds: new Set() };
+          }
+        }
+      }
+
+      // Track-level changes → animate only this card
+      if (oldGroup.title !== newGroup.title ||
+          oldGroup.artist !== newGroup.artist ||
+          oldGroup.album !== newGroup.album ||
+          oldGroup.albumArt !== newGroup.albumArt ||
+          oldGroup.volume !== newGroup.volume ||
+          oldGroup.duration !== newGroup.duration) {
+        changedIds.add(newGroup.id);
+        continue;
+      }
+
+      // Significant seek/position jump
+      if (oldGroup.position != null && newGroup.position != null) {
+        const diff = Math.abs(newGroup.position - (oldGroup.position + timeElapsed));
+        if (diff > 3) {
+          this._log('Seek detected', newGroup.id, diff);
+          changedIds.add(newGroup.id);
+        }
+      }
+    }
+
+    return { needsFull: false, changedIds };
+  },
+
+  // Animate only the specific group cards that changed — everything else stays untouched.
+  _animateGroupCards(changedIds, newGroups) {
+    const animation = (this.config.transitionAnimation || 'fade').toLowerCase();
+    const duration = Math.max(200, Number(this.config.transitionDuration) || 400);
+    const halfDuration = Math.round(duration / 2);
+    const isMini = this._resolveDisplayMode() === 'mini';
+
+    const newGroupMap = new Map();
+    newGroups.forEach((g) => { if (g.id) newGroupMap.set(g.id, g); });
+
+    const animOutClass = animation !== 'none' ? `mmm-sonos__card--anim-out-${animation}` : null;
+    const animInClass  = animation !== 'none' ? `mmm-sonos__card--anim-in-${animation}`  : null;
+
+    for (const id of changedIds) {
+      const el = document.querySelector(`[data-group-id="${id}"]`);
+      if (!el || !el.parentNode) {
+        // Element not in DOM yet — fall back to full re-render
+        this._animatedUpdateDom();
+        return;
+      }
+
+      const newGroup = newGroupMap.get(id);
+      if (!newGroup) continue;
+
+      if (animOutClass) {
+        el.style.setProperty('--mmm-sonos-card-anim-duration', `${halfDuration}ms`);
+        el.classList.add(animOutClass);
+      }
+
+      const parent = el.parentNode;
+      setTimeout(() => {
+        const newEl = isMini ? this._renderMiniGroup(newGroup) : this._renderGroup(newGroup);
+        if (!newEl) { el.remove(); return; }
+
+        if (animInClass) {
+          newEl.style.setProperty('--mmm-sonos-card-anim-duration', `${halfDuration}ms`);
+          newEl.classList.add(animInClass);
+        }
+        parent.replaceChild(newEl, el);
+
+        if (animInClass) {
+          setTimeout(() => newEl.classList.remove(animInClass), halfDuration);
+        }
+      }, animOutClass ? halfDuration : 0);
+    }
+  },
+
+  _shouldUpdateDom() {
+    // Legacy stub — kept so external callers don't break. Not used internally any more.
+    return true;
+  },
+
+  // Use MagicMirror's built-in animate.css integration for full-module transitions
+  // (structural changes: new group appeared, group removed, playback state changed, etc.)
+  _animatedUpdateDom() {
+    const animation = (this.config.transitionAnimation || 'fade').toLowerCase();
+    if (animation === 'none') {
+      this.updateDom(0);
+      return;
+    }
+    const duration = Math.max(200, Number(this.config.transitionDuration) || 400);
+    const animMap = {
+      'fade':       { out: 'fadeOut',     in: 'fadeIn' },
+      'slide-up':   { out: 'fadeOutUp',   in: 'fadeInUp' },
+      'slide-down': { out: 'fadeOutDown', in: 'fadeInDown' },
+      'scale':      { out: 'zoomOut',     in: 'zoomIn' },
+    };
+    const anim = animMap[animation] || animMap['fade'];
+    this.updateDom({ options: { speed: duration, animate: { out: anim.out, in: anim.in } } });
+  },
+
+  // Render a compact single-row card for mini-mode display.
+  _renderMiniGroup(group) {
+    if (!group) return null;
+
+    const isHidden = this._isHidden(group);
+    if (isHidden) return null;
+
+    const playbackState = (group.playbackState || '').toLowerCase();
+    const isPlaying = ['playing', 'transitioning', 'buffering'].includes(playbackState);
+    if (!isPlaying && !this.config.showWhenPaused) return null;
+
+    const size = Math.max(24, Number(this.config.miniAlbumArtSize) || 40);
+    const sizeValue = `${size}px`;
+
+    const row = document.createElement('div');
+    row.className = 'mmm-sonos__mini-group';
+    row.dataset.groupId = group.id;
+
+    // Apply miniWidth if configured
+    const miniW = this._normalizeSize(this.config.miniWidth);
+    if (miniW) {
+      row.style.maxWidth = miniW;
+      row.style.width = '100%';
+    }
+
+    if (this.config.accentuateActive && isPlaying) {
+      row.classList.add('mmm-sonos__group--active');
+    }
+
+    // Apply accent colour on mini card too
+    if (this.config.albumArtColors && group.accentColor) {
+      const { r, g, b } = group.accentColor;
+      row.style.setProperty('--mmm-sonos-card-accent-rgb', `${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}`);
+      row.style.setProperty('--mmm-sonos-card-accent-opacity', String(this.config.albumArtColorsOpacity ?? 0.45));
+      row.classList.add('mmm-sonos__group--accented');
+      if ((this.config.albumArtColorsMode || 'gradient').toLowerCase() === 'solid') {
+        row.classList.add('mmm-sonos__group--accented-solid');
+      }
+    }
+
+    // Thumbnail artwork
+    const art = document.createElement('div');
+    art.className = 'mmm-sonos__mini-art' + (group.albumArt ? '' : ' mmm-sonos__mini-art--placeholder');
+    art.style.width = sizeValue;
+    art.style.height = sizeValue;
+    if (group.albumArt) {
+      const img = document.createElement('img');
+      img.loading = 'lazy';
+      img.src = group.albumArt;
+      img.alt = '';
+      img.style.width = sizeValue;
+      img.style.height = sizeValue;
+      img.onerror = () => { art.style.display = 'none'; };
+      art.appendChild(img);
+    }
+    row.appendChild(art);
+
+    // Text block
+    const textWrap = document.createElement('div');
+    textWrap.className = 'mmm-sonos__mini-text';
+
+    if (this.config.miniShowGroupName && group.name) {
+      const badge = document.createElement('span');
+      badge.className = 'mmm-sonos__mini-badge';
+      badge.innerText = group.name;
+      textWrap.appendChild(badge);
+    }
+
+    const titleLine = document.createElement('div');
+    titleLine.className = 'mmm-sonos__mini-title';
+    let titleText = group.title || this.translate('UNKNOWN_TRACK');
+    if (this.config.miniShowArtist && group.artist) {
+      titleText += ` · ${group.artist}`;
+    }
+    titleLine.innerText = titleText;
+    textWrap.appendChild(titleLine);
+
+    if (this.config.miniShowSource && group.source && !group.isTvSource) {
+      const sourceEl = document.createElement('div');
+      sourceEl.className = 'mmm-sonos__mini-source';
+      const s = (group.source || '').toLowerCase();
+      if (s.includes('spotify')) sourceEl.innerText = this.translate('SOURCE_SPOTIFY');
+      else if (s.includes('apple')) sourceEl.innerText = this.translate('SOURCE_APPLE_MUSIC');
+      else if (s.includes('radio') || s.includes('stream')) sourceEl.innerText = this.translate('SOURCE_RADIO');
+      else sourceEl.innerText = this.translate('SOURCE_UNKNOWN');
+      textWrap.appendChild(sourceEl);
+    }
+
+    row.appendChild(textWrap);
+    return row;
   },
 
   _updateProgressDataFromServer(newGroups, newTimestamp) {

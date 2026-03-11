@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "Ραδιόφωνο",
   "SOURCE_LINE_IN": "Είσοδος γραμμής",
   "SOURCE_UNKNOWN": "Άγνωστο",
-  "VOLUME": "Ένταση"
+  "VOLUME": "Ένταση",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }

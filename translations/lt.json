@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "Radijas",
   "SOURCE_LINE_IN": "Linijos įvestis",
   "SOURCE_UNKNOWN": "Nežinomas",
-  "VOLUME": "Garsumas"
+  "VOLUME": "Garsumas",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }

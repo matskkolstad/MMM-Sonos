@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "Радио",
   "SOURCE_LINE_IN": "Линеен вход",
   "SOURCE_UNKNOWN": "Неизвестно",
-  "VOLUME": "Сила на звука"
+  "VOLUME": "Сила на звука",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }

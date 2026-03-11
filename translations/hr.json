@@ -16,5 +16,6 @@
   "SOURCE_RADIO": "Radio",
   "SOURCE_LINE_IN": "Linijski ulaz",
   "SOURCE_UNKNOWN": "Nepoznato",
-  "VOLUME": "Glasnoća"
+  "VOLUME": "Glasnoća",
+  "SOURCE_APPLE_MUSIC": "Apple Music"
 }
