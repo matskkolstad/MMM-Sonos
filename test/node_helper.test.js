@@ -78,13 +78,111 @@ function _isTvTrack(track) {
 function _detectSource(track) {
   if (!track || typeof track !== 'object') return null;
   if (_isTvTrack(track)) return 'tv';
-  const type = (track.type || track.metadata?.type || '').toLowerCase();
-  if (type) return type;
+
+  // Check URI patterns first — more reliable than track.type which may be generic (e.g. 'track')
   const uri = (track.uri || '').toLowerCase();
-  if (!uri) return null;
-  if (uri.startsWith('x-sonosapi-stream:') || uri.includes('radio')) return 'radio';
-  if (uri.includes('spotify')) return 'spotify';
+  if (uri) {
+    if (
+      uri.startsWith('x-sonosapi-stream:') ||
+      uri.startsWith('x-sonosapi-hls-static:') ||
+      uri.startsWith('x-sonosapi-hls:') ||
+      uri.startsWith('x-sonosapi-rtd:') ||
+      uri.startsWith('x-rincon-mp3radio:') ||
+      uri.startsWith('aac:') ||
+      uri.startsWith('hls-radio:') ||
+      uri.includes('x-sonosapi') ||
+      uri.includes('tunein') ||
+      uri.includes('radiotime') ||
+      uri.includes('/radio')
+    ) {
+      return 'radio';
+    }
+
+    if (uri.includes('spotify')) {
+      return 'spotify';
+    }
+
+    if (uri.includes('apple') || uri.startsWith('nds:music:') || uri.includes('applemusic')) {
+      return 'apple_music';
+    }
+  }
+
+  // Fall back to track.type only when it carries meaningful info (not generic 'track'/'audio')
+  const type = (track.type || track.metadata?.type || '').toLowerCase();
+  if (type && type !== 'track' && type !== 'audio') {
+    return type;
+  }
+
+  // A stationName being set is a strong additional indicator of a radio stream
+  if (track.stationName) {
+    return 'radio';
+  }
+
   return null;
+}
+
+function _parseDIDL(xml, element) {
+  if (!xml || typeof xml !== 'string') {
+    return null;
+  }
+  const tag = element.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = xml.match(new RegExp(`<${tag}[^>]*>([^<]*)</${tag}>`, 'i'));
+  if (!match) {
+    return null;
+  }
+  const value = match[1].trim();
+  return value || null;
+}
+
+function _buildRadioArtUrl(streamUri, coordinatorHost, coordinatorPort, forceHttps) {
+  if (!streamUri || !coordinatorHost) {
+    return null;
+  }
+  const proto = forceHttps ? 'https' : 'http';
+  const port = coordinatorPort || 1400;
+  return `${proto}://${coordinatorHost}:${port}/getaa?s=1&u=${encodeURIComponent(streamUri)}`;
+}
+
+function _isHidden(group, config) {
+  const byGroup = (config.hiddenGroups || []).map((g) => g.toLowerCase());
+  const bySpeaker = (config.hiddenSpeakers || []).map((g) => g.toLowerCase());
+  const allowedGroups = (config.allowedGroups || []).map((g) => g.toLowerCase());
+  const allowedSpeakers = (config.allowedSpeakers || []).map((g) => g.toLowerCase());
+
+  // Blacklist — explicit hide by group id/name
+  if (byGroup.includes((group.id || '').toLowerCase()) || byGroup.includes((group.name || '').toLowerCase())) {
+    return true;
+  }
+
+  // Blacklist — hide if any member is in the hidden list
+  if (group.members && group.members.some((m) => bySpeaker.includes(m.toLowerCase()))) {
+    return true;
+  }
+
+  // Blacklist — hide by coordinator IP
+  if (group.coordinatorHost && bySpeaker.includes(group.coordinatorHost.toLowerCase())) {
+    return true;
+  }
+
+  // Whitelist — if allowedGroups is set, only show matching group names/IDs/IPs
+  if (allowedGroups.length > 0) {
+    const matchGroup =
+      allowedGroups.includes((group.id || '').toLowerCase()) ||
+      allowedGroups.includes((group.name || '').toLowerCase()) ||
+      (group.coordinatorHost && allowedGroups.includes(group.coordinatorHost.toLowerCase()));
+    if (!matchGroup) return true;
+  }
+
+  // Whitelist — if allowedSpeakers is set, only show groups that have at least one allowed member
+  if (allowedSpeakers.length > 0) {
+    const hasAllowedMember =
+      group.members &&
+      group.members.some((m) => allowedSpeakers.includes(m.toLowerCase()));
+    const hostAllowed = group.coordinatorHost && allowedSpeakers.includes(group.coordinatorHost.toLowerCase());
+    if (!hasAllowedMember && !hostAllowed) return true;
+  }
+
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -246,12 +344,44 @@ describe('_detectSource()', () => {
     assert.equal(_detectSource({ title: 'TV' }), 'tv');
   });
 
-  it('returns "radio" for streaming URI', () => {
+  it('returns "radio" for x-sonosapi-stream URI', () => {
     assert.equal(_detectSource({ uri: 'x-sonosapi-stream:something' }), 'radio');
+  });
+
+  it('returns "radio" for x-sonosapi-hls URI', () => {
+    assert.equal(_detectSource({ uri: 'x-sonosapi-hls:something' }), 'radio');
+  });
+
+  it('returns "radio" for x-rincon-mp3radio URI', () => {
+    assert.equal(_detectSource({ uri: 'x-rincon-mp3radio:something' }), 'radio');
+  });
+
+  it('returns "radio" for tunein URI', () => {
+    assert.equal(_detectSource({ uri: 'http://opml.radiotime.com/tune.ashx?id=s1234' }), 'radio');
+  });
+
+  it('returns "radio" for aac: URI', () => {
+    assert.equal(_detectSource({ uri: 'aac:http://stream.example.com/radio' }), 'radio');
+  });
+
+  it('returns "radio" when stationName is set and no URI', () => {
+    assert.equal(_detectSource({ stationName: 'NRK P3' }), 'radio');
   });
 
   it('returns "spotify" for Spotify URI', () => {
     assert.equal(_detectSource({ uri: 'x-sonos-spotify:spotify:track:abc' }), 'spotify');
+  });
+
+  it('returns "apple_music" for Apple Music URI', () => {
+    assert.equal(_detectSource({ uri: 'nds:music:applemusic:track:123' }), 'apple_music');
+  });
+
+  it('returns "apple_music" for URI containing "apple"', () => {
+    assert.equal(_detectSource({ uri: 'x-apple-itunes:something' }), 'apple_music');
+  });
+
+  it('returns null for generic track type', () => {
+    assert.equal(_detectSource({ uri: 'x-file-cifs:/music/song.mp3', type: 'track' }), null);
   });
 
   it('returns null for unknown source', () => {
@@ -390,5 +520,149 @@ describe('Album art cache – filesystem integration', () => {
     // All files should be removed
     filePaths.forEach((fp) => assert.equal(fs.existsSync(fp), false));
     assert.equal(fs.readdirSync(clearDir).length, 0);
+  });
+});
+
+describe('_parseDIDL()', () => {
+  const sampleXml = `
+    <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">
+      <item>
+        <dc:title>NRK P3</dc:title>
+        <upnp:albumArtURI>/getaa?s=1&amp;u=something</upnp:albumArtURI>
+        <r:streamContent xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/">Sigrid – Burning Bridges</r:streamContent>
+      </item>
+    </DIDL-Lite>
+  `;
+
+  it('parses dc:title from DIDL-Lite XML', () => {
+    assert.equal(_parseDIDL(sampleXml, 'dc:title'), 'NRK P3');
+  });
+
+  it('parses upnp:albumArtURI from DIDL-Lite XML', () => {
+    assert.equal(_parseDIDL(sampleXml, 'upnp:albumArtURI'), '/getaa?s=1&amp;u=something');
+  });
+
+  it('parses r:streamContent from DIDL-Lite XML', () => {
+    assert.equal(_parseDIDL(sampleXml, 'r:streamContent'), 'Sigrid – Burning Bridges');
+  });
+
+  it('returns null for missing element', () => {
+    assert.equal(_parseDIDL(sampleXml, 'dc:missing'), null);
+  });
+
+  it('returns null for null XML input', () => {
+    assert.equal(_parseDIDL(null, 'dc:title'), null);
+  });
+
+  it('returns null for non-string XML input', () => {
+    assert.equal(_parseDIDL(42, 'dc:title'), null);
+  });
+
+  it('returns null for empty XML string', () => {
+    assert.equal(_parseDIDL('', 'dc:title'), null);
+  });
+
+  it('returns null when element has empty value', () => {
+    assert.equal(_parseDIDL('<dc:title></dc:title>', 'dc:title'), null);
+  });
+
+  it('trims whitespace from element value', () => {
+    assert.equal(_parseDIDL('<dc:title>  Radio One  </dc:title>', 'dc:title'), 'Radio One');
+  });
+});
+
+describe('_buildRadioArtUrl()', () => {
+  it('builds correct HTTP URL for radio stream', () => {
+    const url = _buildRadioArtUrl('x-sonosapi-stream:s1234', '192.168.1.10', 1400, false);
+    assert.equal(url, 'http://192.168.1.10:1400/getaa?s=1&u=x-sonosapi-stream%3As1234');
+  });
+
+  it('builds HTTPS URL when forceHttps is true', () => {
+    const url = _buildRadioArtUrl('x-sonosapi-stream:s1234', '192.168.1.10', 1400, true);
+    assert.equal(url, 'https://192.168.1.10:1400/getaa?s=1&u=x-sonosapi-stream%3As1234');
+  });
+
+  it('uses default port 1400 when not specified', () => {
+    const url = _buildRadioArtUrl('x-sonosapi-stream:s1234', '192.168.1.10', null, false);
+    assert.equal(url, 'http://192.168.1.10:1400/getaa?s=1&u=x-sonosapi-stream%3As1234');
+  });
+
+  it('URL-encodes the stream URI', () => {
+    const url = _buildRadioArtUrl('x-sonosapi-stream:s=1&q=test', '192.168.1.10', 1400, false);
+    assert.ok(url.includes('x-sonosapi-stream%3As%3D1%26q%3Dtest'));
+  });
+
+  it('returns null for empty stream URI', () => {
+    assert.equal(_buildRadioArtUrl('', '192.168.1.10', 1400, false), null);
+  });
+
+  it('returns null when coordinator host is missing', () => {
+    assert.equal(_buildRadioArtUrl('x-sonosapi-stream:s1234', null, 1400, false), null);
+  });
+
+  it('returns null for null stream URI', () => {
+    assert.equal(_buildRadioArtUrl(null, '192.168.1.10', 1400, false), null);
+  });
+});
+
+describe('_isHidden() – whitelist/blacklist filtering', () => {
+  const group = {
+    id: 'RINCON_ABC:1',
+    name: 'Stue',
+    members: ['Stue', 'Hjemmekontor'],
+    coordinatorHost: '192.168.1.50'
+  };
+
+  it('returns false when no filters are configured', () => {
+    assert.equal(_isHidden(group, {}), false);
+  });
+
+  it('hides by group name (blacklist)', () => {
+    assert.equal(_isHidden(group, { hiddenGroups: ['stue'] }), true);
+  });
+
+  it('hides by group ID (blacklist)', () => {
+    assert.equal(_isHidden(group, { hiddenGroups: ['RINCON_ABC:1'] }), true);
+  });
+
+  it('hides by member name (blacklist)', () => {
+    assert.equal(_isHidden(group, { hiddenSpeakers: ['hjemmekontor'] }), true);
+  });
+
+  it('hides by coordinator IP (blacklist)', () => {
+    assert.equal(_isHidden(group, { hiddenSpeakers: ['192.168.1.50'] }), true);
+  });
+
+  it('does not hide an unrelated group (blacklist)', () => {
+    assert.equal(_isHidden(group, { hiddenGroups: ['Kjøkken'], hiddenSpeakers: ['Bad'] }), false);
+  });
+
+  it('shows group when it matches allowedGroups whitelist', () => {
+    assert.equal(_isHidden(group, { allowedGroups: ['Stue'] }), false);
+  });
+
+  it('hides group that does not match allowedGroups whitelist', () => {
+    assert.equal(_isHidden(group, { allowedGroups: ['Kjøkken'] }), true);
+  });
+
+  it('shows group when its coordinator IP matches allowedGroups', () => {
+    assert.equal(_isHidden(group, { allowedGroups: ['192.168.1.50'] }), false);
+  });
+
+  it('shows group when member matches allowedSpeakers whitelist', () => {
+    assert.equal(_isHidden(group, { allowedSpeakers: ['Stue'] }), false);
+  });
+
+  it('hides group when no members match allowedSpeakers whitelist', () => {
+    assert.equal(_isHidden(group, { allowedSpeakers: ['Kjøkken'] }), true);
+  });
+
+  it('shows group when coordinator IP matches allowedSpeakers whitelist', () => {
+    assert.equal(_isHidden(group, { allowedSpeakers: ['192.168.1.50'] }), false);
+  });
+
+  it('blacklist takes precedence over whitelist', () => {
+    // Group matches whitelist but also matches blacklist — should be hidden
+    assert.equal(_isHidden(group, { hiddenGroups: ['Stue'], allowedGroups: ['Stue'] }), true);
   });
 });

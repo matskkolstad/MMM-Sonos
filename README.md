@@ -10,12 +10,15 @@ A MagicMirror² module that automatically discovers your Sonos zones and shows w
 
 - 🔍 Automatic Sonos discovery – no manual IP configuration required.
 - 🎵 Displays the current track with title, artist, album, and album art.
-- 🎶 **NEW**: Shows playback source icons (Spotify, Radio, Line-in) for easy identification.
-- 📊 **NEW**: Progress indicator with visual bar and time counter for track playback.
-- 🔊 **NEW**: Volume display with dynamic icons showing current volume level.
+- 🎶 Shows playback source icons (Spotify, Apple Music, Radio, Line-in) for easy identification.
+- 📊 Progress indicator with visual bar and time counter for track playback.
+- 🔊 Volume display with dynamic icons showing current volume level.
 - 🧩 Groups are presented as a single unit (no duplicate speakers when they’re grouped).
-- 🙈 Hide specific speakers or groups directly from the configuration.
-- 🧱 Flexible layouts: row, grid, or automatic based on the number of groups.
+- 🙈 Hide specific speakers or groups directly from the configuration – or use whitelists to show only what you want.
+- 🧱 Flexible layouts: row, grid, mini, or automatic based on the number of groups.
+- 🎨 Accent colours derived from album art for a vibrant, personalised card background.
+- ✨ Animated track transitions (fade, slide, scale) with per-card updates in mini mode.
+- 📻 Enhanced radio metadata – station names, logos, and live "now playing" info.
 - 🔠 Adjust text size, album art size, max groups, and module width via config.
 - 🧭 Control alignment without extra CSS – choose left, center, right, or distributed spacing.
 - 🕒 Show the last update time and optionally hide the module when nothing is playing.
@@ -94,7 +97,7 @@ An example showing all available configuration options:
     knownDevices: [],                // Array of static Sonos IPs for fallback
     
     // Display mode and layout
-    displayMode: 'row',              // 'row', 'grid', or 'auto'
+    displayMode: 'row',              // 'row', 'grid', 'mini', or 'auto'
     columns: 2,                      // Number of columns in grid mode (1-4)
     maxGroups: 6,                    // Maximum groups to display
     moduleWidth: null,               // Constrain width (e.g., "600px" or "80%")
@@ -120,6 +123,8 @@ An example showing all available configuration options:
     fadePausedGroups: true,          // Dim groups that aren't playing
     hiddenSpeakers: [],              // Array of speaker/room names to hide
     hiddenGroups: [],                // Array of group names or IDs to hide
+    allowedSpeakers: [],             // Whitelist: only show groups with at least one listed speaker
+    allowedGroups: [],               // Whitelist: only show matching group names, IDs, or coordinator IPs
     
     // Information display
     showGroupMembers: true,          // Show which rooms are in each group
@@ -131,9 +136,25 @@ An example showing all available configuration options:
     accentuateActive: true,          // Highlight actively playing groups
     
     // New features
-    showPlaybackSource: true,        // Show playback source icon (Spotify, Radio, Line-in, etc.)
+    showPlaybackSource: true,        // Show playback source icon (Spotify, Radio, Apple Music, Line-in, etc.)
     showProgress: true,              // Show progress bar and time for current track
     showVolume: true,                // Show volume level for each speaker/group
+
+    // Accent colours from album art (requires cacheAlbumArt: true)
+    albumArtColors: false,           // Extract dominant colour from album art and tint the card
+    albumArtColorsOpacity: 0.45,     // Opacity of the accent colour overlay (0.0–1.0)
+    albumArtColorsMode: 'gradient',  // 'gradient' (left→dark) or 'solid' (flat colour block)
+
+    // Track-change transition animations
+    transitionAnimation: 'fade',     // 'fade', 'slide-up', 'slide-down', 'scale', or 'none'
+    transitionDuration: 400,         // Animation duration in milliseconds
+
+    // Mini-mode options (displayMode: 'mini')
+    miniAlbumArtSize: 40,            // Thumbnail size in pixels for mini-mode cards
+    miniShowGroupName: true,         // Show room/group name badge in mini-mode
+    miniShowArtist: true,            // Append artist to the track title line in mini-mode
+    miniShowSource: false,           // Show playback source label in mini-mode
+    miniWidth: null,                 // Constrain mini-mode card width (e.g., 400 or '400px')
 
     // Album art caching
     cacheAlbumArt: true,             // Cache album art locally for faster loading on slow networks
@@ -180,9 +201,11 @@ Restart MagicMirror² afterwards to load the latest code.
 | `discoveryTimeout` | `5000` | Time in ms spent discovering the first Sonos device. Increase if your network is slow. |
 | `hiddenSpeakers` | `[]` | Array of room/speaker names that should never be shown. Groups containing hidden speakers are skipped. |
 | `hiddenGroups` | `[]` | Hide groups by name or ID. |
+| `allowedSpeakers` | `[]` | **Whitelist**: only show groups that have at least one member in this list. When empty, all groups are shown (unless hidden by `hiddenSpeakers`/`hiddenGroups`). |
+| `allowedGroups` | `[]` | **Whitelist**: only show groups whose name, ID, or coordinator IP appears in this list. When empty, all groups are shown. |
 | `knownDevices` | `[]` | List of static Sonos IPs to try when automatic discovery fails. |
 | `maxGroups` | `6` | Maximum number of groups to render. Handy for large Sonos setups. |
-| `displayMode` | `'row'` | `auto`, `grid`, or `row`. `row` keeps groups on a single horizontal line with scrolling if required. `grid` arranges cards across `columns` columns. `auto` switches to grid when the number of groups exceeds `columns`. |
+| `displayMode` | `'row'` | `auto`, `grid`, `row`, or `mini`. `row` keeps groups on a single horizontal line with scrolling if required. `grid` arranges cards across `columns` columns. `auto` switches to grid when the number of groups exceeds `columns`. `mini` renders each group as a compact single-row card (thumbnail + title). |
 | `columns` | `2` | Number of columns in grid mode (1–4). Also used as the threshold when `displayMode` is `auto`. |
 | `fontScale` | `1` | Multiplier for text size. `1.2` increases text by 20%. |
 | `textSize` | `null` | Override text size in pixels (e.g., `16` or `20`). When set, this overrides `fontScale`. |
@@ -204,9 +227,19 @@ Restart MagicMirror² afterwards to load the latest code.
 | `accentuateActive` | `true` | Highlight actively playing groups with a stronger background. |
 | `showAlbum` | `false` | Display album title under the artist when available. |
 | `cardMinWidth` | `150` | Minimum width for each card, used to adapt row/grid layouts. |
-| `showPlaybackSource` | `true` | Display the playback source icon and label (Spotify, Radio, Line-in, etc.). Icons automatically adjust based on the source. |
+| `showPlaybackSource` | `true` | Display the playback source icon and label (Spotify, Apple Music, Radio, Line-in, etc.). Icons automatically adjust based on the source. |
 | `showProgress` | `true` | Show a progress bar and time counter for the current track. Only displayed when track position and duration information is available. |
 | `showVolume` | `true` | Display the current volume level with an icon that changes based on volume (muted, low, medium, high). |
+| `albumArtColors` | `false` | Extract the dominant colour from each group's cached album art and apply it as a tinted gradient background on the card. Requires `cacheAlbumArt: true`. Uses [node-vibrant](https://github.com/Vibrant-Colors/node-vibrant) under the hood. |
+| `albumArtColorsOpacity` | `0.45` | Opacity of the accent-colour overlay (0.0–1.0). Increase for a stronger tint. |
+| `albumArtColorsMode` | `'gradient'` | `'gradient'` fades the accent colour into a dark background; `'solid'` applies a flat colour block. |
+| `transitionAnimation` | `'fade'` | Animation used when a track changes: `'fade'`, `'slide-up'`, `'slide-down'`, `'scale'`, or `'none'`. |
+| `transitionDuration` | `400` | Duration of the track-change animation in milliseconds. |
+| `miniAlbumArtSize` | `40` | Thumbnail size in pixels for cards in `mini` mode. |
+| `miniShowGroupName` | `true` | Show the room/group name as a small badge in `mini` mode. |
+| `miniShowArtist` | `true` | Append the artist to the title line in `mini` mode (`"Track · Artist"`). |
+| `miniShowSource` | `false` | Show the playback source label (Spotify, Radio, etc.) in `mini` mode. |
+| `miniWidth` | `null` | Constrain the width of each mini-mode card (e.g., `400` or `'400px'`). |
 | `cacheAlbumArt` | `true` | Download and cache album art images locally so they load instantly on subsequent polls. Cached files are stored in `<module>/cache/album-art/` and served by MagicMirror's built-in static file server. |
 | `albumArtCacheTTL` | `2592000000` | How long (in milliseconds) to keep a cached image before re-downloading it. Set to `0` to cache images forever and never expire them. Common values: 30 days = `2592000000`, 90 days = `7776000000`, 120 days = `10368000000`, 365 days = `31536000000`. |
 | `clearCacheOnStart` | `false` | When `true`, all locally cached album art images are deleted every time the module starts. Useful after a config change or to reclaim disk space. |
@@ -217,7 +250,7 @@ Restart MagicMirror² afterwards to load the latest code.
 | `tvIconText` | `'TV'` | Text shown when `tvIconMode` is `'text'`. Scales with `albumArtSize`. |
 | `tvIconSvgPath` | `null` | Path or URL to an SVG used when `tvIconMode` is `'svg'`. If `null`, a bundled `assets/tv-default.svg` is used. |
 | `tvLabel` | `null` | Override the text label for the TV badge (defaults to the translated "TV"). |
-| `debug` | `false` | Log extra information to the MagicMirror console.
+| `debug` | `false` | Log extra information to the MagicMirror console. |
 
 ### TV icon choices
 
@@ -230,9 +263,15 @@ Restart MagicMirror² afterwards to load the latest code.
 
 - **Automatic re-discovery:** If the Sonos device drops off the network, the module will try to find it again.
 - **HTTPS-friendly album art:** Set `forceHttps: true` when your mirror runs behind an HTTPS proxy and browsers block mixed content.
-- **Responsive layout:** The row and grid layouts adapt to smaller displays and switch orientation whenever needed.
+- **Responsive layout:** The `row`, `grid`, `auto`, and `mini` layouts adapt to any display size.
 - **Snappy updates:** Polling combined with caching keeps the UI fresh without noticeable lag.
 - **Local album art cache:** Album art images are downloaded once and served from disk on subsequent polls, giving instant display even on slow networks. See the `cacheAlbumArt`, `albumArtCacheTTL`, and `clearCacheOnStart` options above.
+- **Accent colours:** Enable `albumArtColors: true` (with `cacheAlbumArt: true`) to automatically tint each card with the dominant colour extracted from its album art.
+- **Smooth transitions:** Track changes animate in/out with configurable styles (`transitionAnimation`) and duration (`transitionDuration`). In `mini` mode, only the changing card is animated — the rest stay put.
+- **Mini mode:** `displayMode: 'mini'` renders a compact stacked list of now-playing rows — ideal for a small corner of your display.
+- **Apple Music support:** The module correctly identifies and labels Apple Music streams.
+- **Improved radio metadata:** Station names, logos, and "now playing" stream content are extracted from the Sonos AVTransport metadata for a richer display.
+- **Whitelist filtering:** Use `allowedGroups` / `allowedSpeakers` to restrict the module to only the rooms or groups you care about, without needing to list every other room as hidden.
 
 ### Clearing the album art cache
 
