@@ -31,7 +31,7 @@ function _pick(source, keys) {
 
 function _parseTimeToSeconds(timeString) {
   if (!timeString || typeof timeString !== 'string') return null;
-  if (timeString === 'NOT_IMPLEMENTED' || timeString === '0:00:00') return null;
+  if (timeString === 'NOT_IMPLEMENTED') return null;
   const parts = timeString.split(':');
   if (parts.length !== 3) return null;
   const hours = parseInt(parts[0], 10);
@@ -224,8 +224,8 @@ describe('_parseTimeToSeconds()', () => {
     assert.equal(_parseTimeToSeconds('NOT_IMPLEMENTED'), null);
   });
 
-  it('returns null for 0:00:00', () => {
-    assert.equal(_parseTimeToSeconds('0:00:00'), null);
+  it('returns 0 for 0:00:00 (track at start — position is 0, not unknown)', () => {
+    assert.equal(_parseTimeToSeconds('0:00:00'), 0);
   });
 
   it('returns null for non-string input', () => {

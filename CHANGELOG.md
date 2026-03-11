@@ -19,9 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New `albumArtColorsMode` option (`'gradient'` / `'solid'`) — gradient or flat tint
   - Requires `cacheAlbumArt: true`; uses [node-vibrant](https://github.com/Vibrant-Colors/node-vibrant) (new dependency)
 - **Track-change transition animations** — cards animate when track info changes
-  - New `transitionAnimation` option (`'fade'` / `'slide-up'` / `'slide-down'` / `'scale'` / `'none'`, default: `'fade'`)
+  - New `transitionAnimation` option (`'fade'` / `'slide-up'` / `'slide-down'` / `'slide-left'` / `'slide-right'` / `'scale'` / `'zoom-in'` / `'zoom-out'` / `'flip'` / `'pixelate'` / `'none'`, default: `'fade'`)
   - New `transitionDuration` option (default: `400` ms)
-  - In `mini` mode, only the card whose track changed is animated; other cards remain static
+  - Only the card whose track changed is animated in **all** display modes (mini, row, grid); other cards remain completely static
 - **Whitelist filtering** — restrict the module to specific rooms/groups without listing every other room as hidden
   - New `allowedSpeakers` option — only show groups containing at least one listed room name
   - New `allowedGroups` option — only show groups matching a name, ID, or coordinator IP
@@ -36,7 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `_isHidden` now also checks `coordinatorHost` against `hiddenSpeakers`, supports `allowedGroups` and `allowedSpeakers` whitelists, and is covered by unit tests
 - `displayMode` now accepts `'mini'` in addition to `'auto'`, `'grid'`, and `'row'`
 - Group data emitted by `node_helper` now includes `coordinatorHost`, `stationName`, and `streamTitle` fields
-- Full-module DOM re-renders now use the new `_analyzeChanges` path which differentiates structural changes from track-only changes; structural changes and non-mini mode both trigger a smooth animated re-render
+- Per-card track-change animation now works in **all** display modes (mini, row, grid); only the affected card animates — structural changes still trigger a full re-render
+- Volume changes no longer trigger a track-change animation; the volume label updates silently in-place
+- Album art images now use `loading="eager"` so they start loading immediately when inserted into the DOM, reducing the blank-art flash during track transitions
+- New album art is preloaded (via `new Image()`) during the out-animation phase so the image is browser-cached when the new card appears
 - README updated: Highlights, Complete Configuration example, Configuration table, and Additional features all reflect the new options
 - **Album art local caching** - Album art images are now downloaded and cached locally for faster loading on slower networks
   - New `cacheAlbumArt` config option (default: `true`) to enable/disable caching
@@ -60,6 +63,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added intelligent change detection to skip DOM updates when only progress changes
   - Progress bar now updates smoothly in-place without reconstruction
   - Detects user seeking with 3-second tolerance
+- Fixed spurious animations when only volume changes (e.g. automated volume adjustments)
+- Fixed all speakers animating when only one speaker's track changes in row/grid mode
+- Fixed progress bar not appearing when a track first starts (position reported as `0:00:00`)
+  - `_parseTimeToSeconds('0:00:00')` now correctly returns `0` instead of `null`; only `NOT_IMPLEMENTED` (no position support) returns `null`
+  - `_renderGroup` now shows the progress bar as long as `duration > 0`, even when `position` is `null` or `0`
+  - `_updateProgressDataFromServer` now updates the bar dataset for `position = 0` and uses a class-agnostic selector so it works in both regular and mini display modes
 
 ## [1.3.0] - 2026-01-08
 

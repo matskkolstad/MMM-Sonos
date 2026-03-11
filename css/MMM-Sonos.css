@@ -312,6 +312,54 @@
   from { opacity: 0; transform: scale(0.9); }
   to   { opacity: 1; transform: scale(1); }
 }
+@keyframes mmm-sonos-card-slide-left-out {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(-20px); }
+}
+@keyframes mmm-sonos-card-slide-left-in {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes mmm-sonos-card-slide-right-out {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(20px); }
+}
+@keyframes mmm-sonos-card-slide-right-in {
+  from { opacity: 0; transform: translateX(-20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes mmm-sonos-card-zoom-in-out {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(0.85); }
+}
+@keyframes mmm-sonos-card-zoom-in-in {
+  from { opacity: 0; transform: scale(0.85); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes mmm-sonos-card-zoom-out-out {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(1.15); }
+}
+@keyframes mmm-sonos-card-zoom-out-in {
+  from { opacity: 0; transform: scale(1.15); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes mmm-sonos-card-flip-out {
+  from { opacity: 1; transform: perspective(400px) rotateY(0deg); }
+  to   { opacity: 0; transform: perspective(400px) rotateY(-90deg); }
+}
+@keyframes mmm-sonos-card-flip-in {
+  from { opacity: 0; transform: perspective(400px) rotateY(90deg); }
+  to   { opacity: 1; transform: perspective(400px) rotateY(0deg); }
+}
+@keyframes mmm-sonos-card-pixelate-out {
+  from { opacity: 1; filter: blur(0px); }
+  to   { opacity: 0; filter: blur(8px); }
+}
+@keyframes mmm-sonos-card-pixelate-in {
+  from { opacity: 0; filter: blur(8px); }
+  to   { opacity: 1; filter: blur(0px); }
+}
 
 .mmm-sonos__card--anim-out-fade     { animation: mmm-sonos-card-fade-out       var(--mmm-sonos-card-anim-duration, 200ms) ease forwards; }
 .mmm-sonos__card--anim-in-fade      { animation: mmm-sonos-card-fade-in        var(--mmm-sonos-card-anim-duration, 200ms) ease both; }
@@ -321,6 +369,18 @@
 .mmm-sonos__card--anim-in-slide-down  { animation: mmm-sonos-card-slide-down-in  var(--mmm-sonos-card-anim-duration, 200ms) ease both; }
 .mmm-sonos__card--anim-out-scale    { animation: mmm-sonos-card-scale-out      var(--mmm-sonos-card-anim-duration, 200ms) ease forwards; }
 .mmm-sonos__card--anim-in-scale     { animation: mmm-sonos-card-scale-in       var(--mmm-sonos-card-anim-duration, 200ms) ease both; }
+.mmm-sonos__card--anim-out-slide-left  { animation: mmm-sonos-card-slide-left-out  var(--mmm-sonos-card-anim-duration, 200ms) ease forwards; }
+.mmm-sonos__card--anim-in-slide-left   { animation: mmm-sonos-card-slide-left-in   var(--mmm-sonos-card-anim-duration, 200ms) ease both; }
+.mmm-sonos__card--anim-out-slide-right { animation: mmm-sonos-card-slide-right-out var(--mmm-sonos-card-anim-duration, 200ms) ease forwards; }
+.mmm-sonos__card--anim-in-slide-right  { animation: mmm-sonos-card-slide-right-in  var(--mmm-sonos-card-anim-duration, 200ms) ease both; }
+.mmm-sonos__card--anim-out-zoom-in  { animation: mmm-sonos-card-zoom-in-out    var(--mmm-sonos-card-anim-duration, 200ms) ease forwards; }
+.mmm-sonos__card--anim-in-zoom-in   { animation: mmm-sonos-card-zoom-in-in     var(--mmm-sonos-card-anim-duration, 200ms) ease both; }
+.mmm-sonos__card--anim-out-zoom-out { animation: mmm-sonos-card-zoom-out-out   var(--mmm-sonos-card-anim-duration, 200ms) ease forwards; }
+.mmm-sonos__card--anim-in-zoom-out  { animation: mmm-sonos-card-zoom-out-in    var(--mmm-sonos-card-anim-duration, 200ms) ease both; }
+.mmm-sonos__card--anim-out-flip     { animation: mmm-sonos-card-flip-out       var(--mmm-sonos-card-anim-duration, 200ms) ease forwards; }
+.mmm-sonos__card--anim-in-flip      { animation: mmm-sonos-card-flip-in        var(--mmm-sonos-card-anim-duration, 200ms) ease both; }
+.mmm-sonos__card--anim-out-pixelate { animation: mmm-sonos-card-pixelate-out   var(--mmm-sonos-card-anim-duration, 200ms) ease forwards; }
+.mmm-sonos__card--anim-in-pixelate  { animation: mmm-sonos-card-pixelate-in    var(--mmm-sonos-card-anim-duration, 200ms) ease both; }
 
 @media (max-width: 768px) {
   .mmm-sonos__group {
