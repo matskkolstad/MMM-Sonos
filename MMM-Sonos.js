@@ -49,7 +49,7 @@ Module.register('MMM-Sonos', {
     albumArtColorsOpacity: 0.45,
     albumArtColorsMode: 'gradient', // 'gradient' | 'solid'
     // Track-change transition animations
-    transitionAnimation: 'fade', // 'fade' | 'slide-up' | 'slide-down' | 'scale' | 'none'
+    transitionAnimation: 'fade', // 'fade' | 'slide-up' | 'slide-down' | 'slide-left' | 'slide-right' | 'scale' | 'zoom-in' | 'zoom-out' | 'flip' | 'pixelate' | 'none'
     transitionDuration: 400,
     // Mini-mode display options
     miniAlbumArtSize: 40,
@@ -111,7 +111,7 @@ Module.register('MMM-Sonos', {
         const newTimestamp = payload.timestamp || Date.now();
 
         // Analyse what changed BEFORE updating this.groups / this.lastUpdated
-        const { needsFull, changedIds } = this._analyzeChanges(newGroups, newTimestamp);
+        const { needsFull, changedIds, volumeChangedIds } = this._analyzeChanges(newGroups, newTimestamp);
 
         this.groups = newGroups;
         this.lastUpdated = newTimestamp;
@@ -121,18 +121,25 @@ Module.register('MMM-Sonos', {
           this._log('Structural change — full DOM update');
           this._animatedUpdateDom();
         } else if (changedIds.size > 0) {
-          // Per-card DOM surgery is only stable in mini-mode (compact rows).
-          // In row/grid mode a full animated re-render is simpler and equally smooth.
-          if (this._resolveDisplayMode() === 'mini') {
-            this._log('Mini per-group track change', [...changedIds]);
-            this._animateGroupCards(changedIds, newGroups);
-          } else {
-            this._log('Per-group track change — full DOM update', [...changedIds]);
-            this._animatedUpdateDom();
+          // Per-card animation for whichever group(s) actually changed track/art.
+          // Works for all display modes (mini, row, grid) — only the affected card(s) animate.
+          this._log('Per-group track change', [...changedIds]);
+          this._animateGroupCards(changedIds, newGroups);
+          // Update progress for cards that did NOT change track
+          this._updateProgressDataFromServer(
+            newGroups.filter((g) => !changedIds.has(g.id)),
+            newTimestamp
+          );
+          // Silently update volume for groups with volume-only changes
+          if (volumeChangedIds.size > 0) {
+            this._updateVolumeInPlace(volumeChangedIds, newGroups);
           }
         } else {
-          this._log('Only progress changed, skipping DOM update');
+          this._log('Only progress/volume changed, skipping animation');
           this._updateProgressDataFromServer(newGroups, newTimestamp);
+          if (volumeChangedIds.size > 0) {
+            this._updateVolumeInPlace(volumeChangedIds, newGroups);
+          }
         }
         break;
       }
@@ -378,7 +385,7 @@ Module.register('MMM-Sonos', {
       }
 
       const img = document.createElement('img');
-      img.loading = 'lazy';
+      img.loading = 'eager';
       img.src = group.albumArt;
       img.alt = `${group.title || ''}`.trim() || 'Album art';
       if (sizeValue) {
@@ -1009,19 +1016,20 @@ Module.register('MMM-Sonos', {
   },
 
   // Analyse what changed between the last known groups and the newly received groups.
-  // Returns { needsFull, changedIds } where:
-  //   needsFull  — true when a full re-render is required (structural change)
-  //   changedIds — Set of group IDs whose track/art/volume changed (no structural change)
+  // Returns { needsFull, changedIds, volumeChangedIds } where:
+  //   needsFull       — true when a full re-render is required (structural change)
+  //   changedIds      — Set of group IDs whose track/art changed (triggers per-card animation)
+  //   volumeChangedIds — Set of group IDs whose volume changed but track did not (silent in-place update)
   _analyzeChanges(newGroups, newTimestamp) {
-    const none = { needsFull: false, changedIds: new Set() };
+    const none = { needsFull: false, changedIds: new Set(), volumeChangedIds: new Set() };
 
     if (!this.groups || this.groups.length !== newGroups.length) {
-      return { needsFull: true, changedIds: new Set() };
+      return { needsFull: true, changedIds: new Set(), volumeChangedIds: new Set() };
     }
 
     if (newGroups.length === 0) {
       return this.groups.length !== 0
-        ? { needsFull: true, changedIds: new Set() }
+        ? { needsFull: true, changedIds: new Set(), volumeChangedIds: new Set() }
         : none;
     }
 
@@ -1030,35 +1038,37 @@ Module.register('MMM-Sonos', {
 
     const timeElapsed = this.lastUpdated ? (newTimestamp - this.lastUpdated) / 1000 : 0;
     const changedIds = new Set();
+    const volumeChangedIds = new Set();
 
     for (const newGroup of newGroups) {
       const oldGroup = oldGroupMap.get(newGroup.id);
-      if (!oldGroup) return { needsFull: true, changedIds: new Set() };
+      if (!oldGroup) return { needsFull: true, changedIds: new Set(), volumeChangedIds: new Set() };
 
       // Structural changes → full re-render
       if (oldGroup.name !== newGroup.name ||
           oldGroup.playbackState !== newGroup.playbackState ||
           oldGroup.source !== newGroup.source) {
-        return { needsFull: true, changedIds: new Set() };
+        return { needsFull: true, changedIds: new Set(), volumeChangedIds: new Set() };
       }
 
       if (oldGroup.members?.length !== newGroup.members?.length) {
-        return { needsFull: true, changedIds: new Set() };
+        return { needsFull: true, changedIds: new Set(), volumeChangedIds: new Set() };
       }
       if (oldGroup.members && newGroup.members) {
         for (let j = 0; j < oldGroup.members.length; j++) {
           if (oldGroup.members[j] !== newGroup.members[j]) {
-            return { needsFull: true, changedIds: new Set() };
+            return { needsFull: true, changedIds: new Set(), volumeChangedIds: new Set() };
           }
         }
       }
 
       // Track-level changes → animate only this card
+      // Note: volume is intentionally excluded here; a volume-only change should not
+      // trigger a visible track-change animation — it is handled silently below.
       if (oldGroup.title !== newGroup.title ||
           oldGroup.artist !== newGroup.artist ||
           oldGroup.album !== newGroup.album ||
           oldGroup.albumArt !== newGroup.albumArt ||
-          oldGroup.volume !== newGroup.volume ||
           oldGroup.duration !== newGroup.duration) {
         changedIds.add(newGroup.id);
         continue;
@@ -1070,14 +1080,21 @@ Module.register('MMM-Sonos', {
         if (diff > 3) {
           this._log('Seek detected', newGroup.id, diff);
           changedIds.add(newGroup.id);
+          continue;
         }
+      }
+
+      // Volume-only change → silent in-place DOM update, no animation
+      if (oldGroup.volume !== newGroup.volume) {
+        volumeChangedIds.add(newGroup.id);
       }
     }
 
-    return { needsFull: false, changedIds };
+    return { needsFull: false, changedIds, volumeChangedIds };
   },
 
   // Animate only the specific group cards that changed — everything else stays untouched.
+  // Works for all display modes (mini, row, grid).
   _animateGroupCards(changedIds, newGroups) {
     const animation = (this.config.transitionAnimation || 'fade').toLowerCase();
     const duration = Math.max(200, Number(this.config.transitionDuration) || 400);
@@ -1100,6 +1117,14 @@ Module.register('MMM-Sonos', {
 
       const newGroup = newGroupMap.get(id);
       if (!newGroup) continue;
+
+      // Preload the new album art during the out-animation so the image is already
+      // browser-cached when the new card is inserted, eliminating the blank-art flash.
+      if (newGroup.albumArt) {
+        const preloadImg = new Image();
+        preloadImg.loading = 'eager';
+        preloadImg.src = newGroup.albumArt;
+      }
 
       if (animOutClass) {
         el.style.setProperty('--mmm-sonos-card-anim-duration', `${halfDuration}ms`);
@@ -1139,10 +1164,16 @@ Module.register('MMM-Sonos', {
     }
     const duration = Math.max(200, Number(this.config.transitionDuration) || 400);
     const animMap = {
-      'fade':       { out: 'fadeOut',     in: 'fadeIn' },
-      'slide-up':   { out: 'fadeOutUp',   in: 'fadeInUp' },
-      'slide-down': { out: 'fadeOutDown', in: 'fadeInDown' },
-      'scale':      { out: 'zoomOut',     in: 'zoomIn' },
+      'fade':        { out: 'fadeOut',      in: 'fadeIn' },
+      'slide-up':    { out: 'fadeOutUp',    in: 'fadeInUp' },
+      'slide-down':  { out: 'fadeOutDown',  in: 'fadeInDown' },
+      'slide-left':  { out: 'fadeOutLeft',  in: 'fadeInRight' },
+      'slide-right': { out: 'fadeOutRight', in: 'fadeInLeft' },
+      'scale':       { out: 'zoomOut',      in: 'zoomIn' },
+      'zoom-in':     { out: 'zoomOut',      in: 'zoomIn' },
+      'zoom-out':    { out: 'zoomIn',       in: 'zoomOut' },
+      'flip':        { out: 'flipOutX',     in: 'flipInX' },
+      'pixelate':    { out: 'fadeOut',      in: 'fadeIn' }, // full-module fallback: CSS blur only works for per-card animations
     };
     const anim = animMap[animation] || animMap['fade'];
     this.updateDom({ options: { speed: duration, animate: { out: anim.out, in: anim.in } } });
@@ -1195,7 +1226,7 @@ Module.register('MMM-Sonos', {
     art.style.height = sizeValue;
     if (group.albumArt) {
       const img = document.createElement('img');
-      img.loading = 'lazy';
+      img.loading = 'eager';
       img.src = group.albumArt;
       img.alt = '';
       img.style.width = sizeValue;
@@ -1272,6 +1303,27 @@ Module.register('MMM-Sonos', {
         timeDisplay.dataset.initialPosition = group.position;
         timeDisplay.dataset.duration = group.duration;
         timeDisplay.dataset.timestamp = newTimestamp;
+      }
+    });
+  },
+
+  // Silently update the volume label in the DOM for groups whose volume changed
+  // but whose track did not change — no animation needed.
+  _updateVolumeInPlace(volumeChangedIds, newGroups) {
+    if (!this.config.showVolume) {
+      return;
+    }
+    newGroups.forEach((group) => {
+      if (!volumeChangedIds.has(group.id)) {
+        return;
+      }
+      const groupEl = document.querySelector(`[data-group-id="${group.id}"]`);
+      if (!groupEl) {
+        return;
+      }
+      const volumeLabel = groupEl.querySelector('.mmm-sonos__volume-label');
+      if (volumeLabel && group.volume != null) {
+        volumeLabel.innerText = `${this.translate('VOLUME')}: ${group.volume}%`;
       }
     });
   }
