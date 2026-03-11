@@ -516,7 +516,7 @@ module.exports = NodeHelper.create({
     }
     // Match both <ns:tag>value</ns:tag> and <tag>value</tag>
     const tag = element.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const match = xml.match(new RegExp(`<${tag}[^>]*>([^<]*)<\/${tag}>`, 'i'));
+    const match = xml.match(new RegExp(`<${tag}[^>]*>([^<]*)</${tag}>`, 'i'));
     if (!match) {
       return null;
     }

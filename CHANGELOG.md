@@ -8,7 +8,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Album art local caching** - Album art images are now downloaded and cached locally for faster loading on slower networks (#)
+- **Mini mode** (`displayMode: 'mini'`) — compact single-row cards showing a small thumbnail, group name badge, track title, and optional artist; ideal for a small corner of the display
+  - New `miniAlbumArtSize` option (default: `40`) — thumbnail size in pixels
+  - New `miniShowGroupName` option (default: `true`) — show room name badge
+  - New `miniShowArtist` option (default: `true`) — append artist to title line
+  - New `miniShowSource` option (default: `false`) — show source label (Spotify, Radio, etc.)
+  - New `miniWidth` option (default: `null`) — constrain per-card width
+- **Accent colours from album art** (`albumArtColors: true`) — dominant colour extracted from cached album art and applied as a tinted gradient on each card
+  - New `albumArtColorsOpacity` option (default: `0.45`) — overlay opacity
+  - New `albumArtColorsMode` option (`'gradient'` / `'solid'`) — gradient or flat tint
+  - Requires `cacheAlbumArt: true`; uses [node-vibrant](https://github.com/Vibrant-Colors/node-vibrant) (new dependency)
+- **Track-change transition animations** — cards animate when track info changes
+  - New `transitionAnimation` option (`'fade'` / `'slide-up'` / `'slide-down'` / `'scale'` / `'none'`, default: `'fade'`)
+  - New `transitionDuration` option (default: `400` ms)
+  - In `mini` mode, only the card whose track changed is animated; other cards remain static
+- **Whitelist filtering** — restrict the module to specific rooms/groups without listing every other room as hidden
+  - New `allowedSpeakers` option — only show groups containing at least one listed room name
+  - New `allowedGroups` option — only show groups matching a name, ID, or coordinator IP
+- **Apple Music source detection and display** — streams from Apple Music are now correctly identified as `apple_music` and shown with the "Apple Music" label
+- **Improved radio metadata** — station name, station logo, and live stream content ("now playing") are retrieved from the Sonos AVTransport `GetMediaInfo`/`GetPositionInfo` APIs for richer radio display
+- **Radio art fallback** — a `/getaa` URL is built from the stream URI when no artwork is reported, giving a station logo in more cases
+- **Album art image error handling** — broken image URLs now hide the art wrapper instead of showing a broken-image icon
+- **Unit tests for new functions** — `_parseDIDL`, `_buildRadioArtUrl`, updated `_detectSource`, and `_isHidden` (whitelist logic) are covered; total tests: 78
+
+### Changed
+- `_detectSource` now checks URI patterns before `track.type` (more reliable); generic types `'track'` and `'audio'` are ignored as they do not carry useful source info
+- `_isHidden` now also checks `coordinatorHost` against `hiddenSpeakers`, supports `allowedGroups` and `allowedSpeakers` whitelists, and is covered by unit tests
+- `displayMode` now accepts `'mini'` in addition to `'auto'`, `'grid'`, and `'row'`
+- Group data emitted by `node_helper` now includes `coordinatorHost`, `stationName`, and `streamTitle` fields
+- Full-module DOM re-renders now use the new `_analyzeChanges` path which differentiates structural changes from track-only changes; structural changes and non-mini mode both trigger a smooth animated re-render
+- README updated: Highlights, Complete Configuration example, Configuration table, and Additional features all reflect the new options
+- **Album art local caching** - Album art images are now downloaded and cached locally for faster loading on slower networks
   - New `cacheAlbumArt` config option (default: `true`) to enable/disable caching
   - New `albumArtCacheTTL` config option (default: 30 days) — set to `0` to cache forever (no expiry)
   - New `clearCacheOnStart` config option (default: `false`) — wipes all cached images on module start
@@ -20,28 +50,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Support for on-demand cache clearing via `SONOS_CLEAR_CACHE` socket notification
   - Public `clearAlbumArtCache()` method callable from the browser console
 - **Unit test suite** - Added test infrastructure using Node.js built-in `node:test` runner
-  - Tests cover `_pick`, `_parseTimeToSeconds`, `_normalizeArt`, `_generateCacheKey`, `_isTvTrack`, `_detectSource`, and filesystem cache logic (39 tests)
+  - Tests cover `_pick`, `_parseTimeToSeconds`, `_normalizeArt`, `_generateCacheKey`, `_isTvTrack`, `_detectSource`, `_parseDIDL`, `_buildRadioArtUrl`, `_isHidden`, and filesystem cache logic
   - Run with `npm test`
 
-### Changed
-- Updated `npm test` script to run the new unit test suite
-- Updated ESLint config to lint `test/` directory
-- Added `cache/` to `.gitignore`
-- Moved `COPILOT_AGENT_INSTRUCTIONS.md` → `.github/copilot-instructions.md` (standard GitHub location)
-- Updated Copilot agent instructions with detailed conventions including changelog policy, test requirements, and repository structure
-- Updated dependency overrides: `globals` 16.5.0 → 17.0.0, `eslint` 9.39.1 → 9.39.2, `@eslint/js` 9.39.1 → 9.39.2
-
-### Removed
-- Removed `VERIFICATION_REPORT.md` (temporary verification document, not needed in repo)
-- Removed `VERIFIKASJONSRAPPORT_NO.md` (Norwegian duplicate of verification report)
-- Removed `PR_MERGE_ANALYSIS.md` (temporary analysis document, not needed in repo)
-
 ### Fixed
-- Fixed progress bar stuttering by eliminating unnecessary DOM re-renders (#26)
+- Removed duplicate `_shouldUpdateDom` method definition that caused an ESLint `no-dupe-keys` error
+- Fixed unnecessary regex escape `\/` in `_parseDIDL` (ESLint `no-useless-escape`)
+- Fixed progress bar stuttering by eliminating unnecessary DOM re-renders
   - Added intelligent change detection to skip DOM updates when only progress changes
   - Progress bar now updates smoothly in-place without reconstruction
   - Detects user seeking with 3-second tolerance
-  - Optimized CSS transition from 0.3s to 1s linear for smoother animation
 
 ## [1.3.0] - 2026-01-08
 
