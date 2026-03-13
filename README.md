@@ -430,7 +430,7 @@ Some ideas for future improvements:
 - Add volume control through touch or remote notifications.
 - ~~Show the playback source (Spotify, Radio, Line-in) with an icon.~~ ✅ **Completed**
 - ~~Include a simple progress indicator for the current track.~~ ✅ **Completed**
-- Cache album art locally for faster loading on slower networks.
+- ~~Cache album art locally for faster loading on slower networks.~~ ✅ **Completed**
 
 ## License
 
