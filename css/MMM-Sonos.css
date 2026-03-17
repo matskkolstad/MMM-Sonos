@@ -65,6 +65,7 @@
 
 .mmm-sonos--mode-grid .mmm-sonos__group {
   width: 100%;
+  box-sizing: border-box;
 }
 
 .mmm-sonos--mode-row .mmm-sonos__group {
