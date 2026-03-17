@@ -57,6 +57,10 @@ Module.register('MMM-Sonos', {
     miniShowArtist: true,
     miniShowSource: false,
     miniWidth: null,          // max-width of the mini-mode wrapper, e.g. 400 or '400px'
+    // Fullscreen-mode display options
+    fullscreenSpeaker: null,       // name/ID of speaker to show; null = first playing speaker
+    fullscreenAlbumArtSize: 300,   // album art size in pixels for fullscreen mode
+    fullscreenWidth: null,         // max-width of the fullscreen wrapper, e.g. 600 or '600px'
     // Whitelist: if non-empty only matching speakers/groups are shown (per-instance)
     allowedSpeakers: [],      // e.g. ['Stue', 'Kjøkken'] — speaker/room names
     allowedGroups: []         // e.g. group names or coordinator IPs
@@ -221,6 +225,11 @@ Module.register('MMM-Sonos', {
   getDom() {
     const wrapper = document.createElement('div');
     wrapper.classList.add('mmm-sonos');
+    // Tag this wrapper with the module's unique identifier so in-place DOM updates
+    // (per-card animation, progress, volume) can be scoped to this instance only.
+    // This prevents one module instance from accidentally modifying another instance's cards,
+    // which is the root cause of normal+mini dual-mode display corruption.
+    wrapper.dataset.moduleId = this.identifier;
     const textSizeValue = this._coercePixelValue(this.config.textSize, null);
     if (textSizeValue) {
       wrapper.style.setProperty('--mmm-sonos-text-size', textSizeValue);
@@ -276,10 +285,18 @@ Module.register('MMM-Sonos', {
   this._applyLayoutMode(wrapper, displayMode, cardMinValue, gridColumns);
 
     const isMiniMode = displayMode === 'mini';
-    const groupsToRender = this.groups
-      .slice(0, this.config.maxGroups)
-      .map((group) => isMiniMode ? this._renderMiniGroup(group) : this._renderGroup(group))
-      .filter(Boolean);
+    const isFullscreenMode = displayMode === 'fullscreen';
+
+    let groupsToRender;
+    if (isFullscreenMode) {
+      const targetGroup = this._resolveFullscreenGroup();
+      groupsToRender = targetGroup ? [this._renderFullscreenGroup(targetGroup)].filter(Boolean) : [];
+    } else {
+      groupsToRender = this.groups
+        .slice(0, this.config.maxGroups)
+        .map((group) => isMiniMode ? this._renderMiniGroup(group) : this._renderGroup(group))
+        .filter(Boolean);
+    }
 
     if (!groupsToRender.length) {
       const emptyMessage = document.createElement('div');
@@ -348,9 +365,11 @@ Module.register('MMM-Sonos', {
 
     const cardWidth = Number(this.config.cardMinWidth);
     if (!Number.isNaN(cardWidth) && cardWidth > 0) {
-      const widthValue = `${cardWidth}px`;
-      container.style.minWidth = widthValue;
-      container.style.flexBasis = widthValue;
+      container.style.minWidth = `${cardWidth}px`;
+      // Do not set flexBasis inline — the CSS class already handles it via
+      // --mmm-sonos-card-min. Setting flexBasis inline would override the
+      // mode-specific CSS (e.g. 'flex: 0 0 auto' for row mode) and cause
+      // content to overflow fixed-width cards, creating visual overlap.
     }
 
     if (this.config.accentuateActive && isPlaying) {
@@ -610,7 +629,7 @@ Module.register('MMM-Sonos', {
   },
 
   _resolveDisplayMode() {
-    if (['grid', 'row', 'mini'].includes(this.config.displayMode)) {
+    if (['grid', 'row', 'mini', 'fullscreen'].includes(this.config.displayMode)) {
       return this.config.displayMode;
     }
     // auto mode: grid if more than columns else row
@@ -705,6 +724,17 @@ Module.register('MMM-Sonos', {
       const miniW = this._normalizeSize(this.config.miniWidth);
       if (miniW) {
         wrapper.style.maxWidth = miniW;
+        wrapper.style.width = '100%';
+      }
+    } else if (mode === 'fullscreen') {
+      wrapper.style.display = 'flex';
+      wrapper.style.flexDirection = 'column';
+      wrapper.style.flexWrap = 'nowrap';
+      wrapper.style.gap = '0';
+      wrapper.style.overflowX = 'visible';
+      const fsWidth = this._normalizeSize(this.config.fullscreenWidth);
+      if (fsWidth) {
+        wrapper.style.maxWidth = fsWidth;
         wrapper.style.width = '100%';
       }
     }
@@ -952,6 +982,14 @@ Module.register('MMM-Sonos', {
     return this.file('assets/tv-default.svg');
   },
 
+  // Returns the module's own wrapper element from the live DOM.
+  // By scoping all in-place DOM queries through this element we prevent one module
+  // instance from accidentally finding or modifying cards that belong to another
+  // instance (e.g. a normal-mode instance operating on mini-mode cards).
+  _getModuleWrapper() {
+    return document.querySelector(`[data-module-id="${this.identifier}"]`);
+  },
+
   _startProgressAnimation() {
     // Only start the animation timer if progress display is enabled
     if (!this.config.showProgress) {
@@ -1097,12 +1135,14 @@ Module.register('MMM-Sonos', {
   },
 
   // Animate only the specific group cards that changed — everything else stays untouched.
-  // Works for all display modes (mini, row, grid).
+  // Works for all display modes (mini, row, grid, fullscreen).
   _animateGroupCards(changedIds, newGroups) {
     const animation = (this.config.transitionAnimation || 'fade').toLowerCase();
     const duration = Math.max(200, Number(this.config.transitionDuration) || 400);
     const halfDuration = Math.round(duration / 2);
-    const isMini = this._resolveDisplayMode() === 'mini';
+    const displayMode = this._resolveDisplayMode();
+    const isMini = displayMode === 'mini';
+    const isFullscreen = displayMode === 'fullscreen';
 
     const newGroupMap = new Map();
     newGroups.forEach((g) => { if (g.id) newGroupMap.set(g.id, g); });
@@ -1110,8 +1150,11 @@ Module.register('MMM-Sonos', {
     const animOutClass = animation !== 'none' ? `mmm-sonos__card--anim-out-${animation}` : null;
     const animInClass  = animation !== 'none' ? `mmm-sonos__card--anim-in-${animation}`  : null;
 
+    // Scope all queries to this module instance's own wrapper to avoid cross-instance interference
+    const moduleWrapper = this._getModuleWrapper();
+
     for (const id of changedIds) {
-      const el = document.querySelector(`[data-group-id="${id}"]`);
+      const el = moduleWrapper ? moduleWrapper.querySelector(`[data-group-id="${id}"]`) : null;
       if (!el || !el.parentNode) {
         // Element not in DOM yet — fall back to full re-render
         this._animatedUpdateDom();
@@ -1136,7 +1179,14 @@ Module.register('MMM-Sonos', {
 
       const parent = el.parentNode;
       setTimeout(() => {
-        const newEl = isMini ? this._renderMiniGroup(newGroup) : this._renderGroup(newGroup);
+        let newEl;
+        if (isMini) {
+          newEl = this._renderMiniGroup(newGroup);
+        } else if (isFullscreen) {
+          newEl = this._renderFullscreenGroup(newGroup);
+        } else {
+          newEl = this._renderGroup(newGroup);
+        }
         if (!newEl) { el.remove(); return; }
 
         if (animInClass) {
@@ -1276,8 +1326,187 @@ Module.register('MMM-Sonos', {
     return row;
   },
 
+  // Resolve which group to show in fullscreen mode.
+  // If fullscreenSpeaker is configured, find the matching group; otherwise use the first group.
+  _resolveFullscreenGroup() {
+    if (!this.groups || !this.groups.length) {
+      return null;
+    }
+
+    const speaker = (this.config.fullscreenSpeaker || '').toLowerCase().trim();
+    if (speaker) {
+      const match = this.groups.find((g) =>
+        (g.name || '').toLowerCase() === speaker ||
+        (g.id || '').toLowerCase() === speaker ||
+        (g.coordinatorHost || '').toLowerCase() === speaker ||
+        (g.members || []).some((m) => m.toLowerCase() === speaker)
+      );
+      return match || this.groups[0];
+    }
+
+    return this.groups[0];
+  },
+
+  // Render a large, full-width card for fullscreen mode.
+  // Shows album art prominently, with title, artist, album, progress, and volume beneath.
+  _renderFullscreenGroup(group) {
+    if (!group) return null;
+
+    const isHidden = this._isHidden(group);
+    if (isHidden) return null;
+
+    const playbackState = (group.playbackState || '').toLowerCase();
+    const isPlaying = ['playing', 'transitioning', 'buffering'].includes(playbackState);
+    if (!isPlaying && !this.config.showWhenPaused) return null;
+
+    const artSize = Math.max(80, Number(this.config.fullscreenAlbumArtSize) || 300);
+    const sizeValue = `${artSize}px`;
+    const isTvSource = this._isTvSource(group);
+
+    const container = document.createElement('div');
+    container.className = 'mmm-sonos__fullscreen-group';
+    container.dataset.groupId = group.id;
+
+    if (!isPlaying) {
+      container.classList.add('mmm-sonos__group--paused');
+    }
+
+    if (this.config.accentuateActive && isPlaying) {
+      container.classList.add('mmm-sonos__group--active');
+    }
+
+    if (this.config.albumArtColors && group.accentColor) {
+      const { r, g, b } = group.accentColor;
+      container.style.setProperty('--mmm-sonos-card-accent-rgb', `${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}`);
+      container.style.setProperty('--mmm-sonos-card-accent-opacity', String(this.config.albumArtColorsOpacity ?? 0.45));
+      container.classList.add('mmm-sonos__group--accented');
+      if ((this.config.albumArtColorsMode || 'gradient').toLowerCase() === 'solid') {
+        container.classList.add('mmm-sonos__group--accented-solid');
+      }
+    }
+
+    // Album art
+    if (group.albumArt && !isTvSource) {
+      const artWrapper = document.createElement('div');
+      artWrapper.className = 'mmm-sonos__fullscreen-art';
+      artWrapper.style.width = sizeValue;
+      artWrapper.style.height = sizeValue;
+
+      const img = document.createElement('img');
+      img.loading = 'eager';
+      img.src = group.albumArt;
+      img.alt = '';
+      img.onerror = () => { artWrapper.style.display = 'none'; };
+      artWrapper.appendChild(img);
+      container.appendChild(artWrapper);
+    } else if (isTvSource) {
+      const artWrapper = document.createElement('div');
+      artWrapper.className = 'mmm-sonos__fullscreen-art mmm-sonos__art--tv';
+      artWrapper.style.width = sizeValue;
+      artWrapper.style.height = sizeValue;
+
+      if (this.config.showTvIcon !== false) {
+        const icon = document.createElement('span');
+        icon.className = 'mmm-sonos__source-icon';
+        icon.innerText = this.config.tvIcon || '📺';
+        icon.style.display = 'flex';
+        icon.style.alignItems = 'center';
+        icon.style.justifyContent = 'center';
+        icon.style.width = '100%';
+        icon.style.height = '100%';
+        icon.style.fontSize = `${Math.round(artSize * 0.5)}px`;
+        artWrapper.appendChild(icon);
+      }
+      container.appendChild(artWrapper);
+    }
+
+    // Text content
+    const content = document.createElement('div');
+    content.className = 'mmm-sonos__fullscreen-content';
+
+    // Group name
+    const groupName = document.createElement('div');
+    groupName.className = 'mmm-sonos__fullscreen-group-name';
+    groupName.innerText = group.name;
+    content.appendChild(groupName);
+
+    // Playback state
+    if (this.config.showPlaybackState && group.playbackState) {
+      const state = document.createElement('span');
+      state.className = 'mmm-sonos__state';
+      state.innerText = this.translate(group.playbackState.toUpperCase()) || group.playbackState;
+      content.appendChild(state);
+    }
+
+    // Track info
+    const titleIsDuplicateTv = isTvSource && (!group.artist) && typeof group.title === 'string' && group.title.trim().toLowerCase() === 'tv';
+    const hasTrackInfo = group.title || group.artist;
+
+    if (hasTrackInfo && !titleIsDuplicateTv) {
+      const title = document.createElement('div');
+      title.className = 'mmm-sonos__fullscreen-title';
+      title.innerText = group.title || this.translate('UNKNOWN_TRACK');
+      content.appendChild(title);
+
+      if (group.artist) {
+        const artist = document.createElement('div');
+        artist.className = 'mmm-sonos__fullscreen-artist';
+        artist.innerText = group.artist;
+        content.appendChild(artist);
+      }
+
+      if (this.config.showAlbum && group.album) {
+        const album = document.createElement('div');
+        album.className = 'mmm-sonos__fullscreen-album';
+        album.innerText = group.album;
+        content.appendChild(album);
+      }
+    }
+
+    // TV source label
+    if (isTvSource && this.config.showTvSource) {
+      const sourceEl = this._renderSourceLabel('center');
+      if (sourceEl) content.appendChild(sourceEl);
+    }
+
+    // Playback source
+    if (this.config.showPlaybackSource && group.source && !isTvSource) {
+      const sourceEl = this._renderPlaybackSource(group.source, 'center');
+      if (sourceEl) content.appendChild(sourceEl);
+    }
+
+    // Progress bar
+    if (this.config.showProgress && group.duration != null && group.duration > 0) {
+      const progressEl = this._renderProgress(group.position ?? 0, group.duration, 'center');
+      if (progressEl) content.appendChild(progressEl);
+    }
+
+    // Volume
+    if (this.config.showVolume && group.volume != null) {
+      const volumeEl = this._renderVolume(group.volume, 'center');
+      if (volumeEl) content.appendChild(volumeEl);
+    }
+
+    // Group members
+    if (this.config.showGroupMembers && group.members && group.members.length > 1) {
+      const members = document.createElement('div');
+      members.className = 'mmm-sonos__members';
+      members.innerText = group.members.join(', ');
+      content.appendChild(members);
+    }
+
+    container.appendChild(content);
+    return container;
+  },
+
   _updateProgressDataFromServer(newGroups, newTimestamp) {
     if (!this.config.showProgress) {
+      return;
+    }
+
+    // Scope queries to this module instance to prevent cross-instance interference
+    const moduleWrapper = this._getModuleWrapper();
+    if (!moduleWrapper) {
       return;
     }
 
@@ -1288,10 +1517,8 @@ Module.register('MMM-Sonos', {
         return;
       }
 
-      // Find the progress elements for this group.
-      // Use an attribute-only selector so it matches both .mmm-sonos__group (row/grid)
-      // and .mmm-sonos__mini-group (mini mode) elements.
-      const groupElement = document.querySelector(`[data-group-id="${group.id}"]`);
+      // Find the progress elements for this group, scoped to this module instance.
+      const groupElement = moduleWrapper.querySelector(`[data-group-id="${group.id}"]`);
       if (!groupElement) {
         return;
       }
@@ -1322,11 +1549,18 @@ Module.register('MMM-Sonos', {
     if (!this.config.showVolume) {
       return;
     }
+
+    // Scope queries to this module instance to prevent cross-instance interference
+    const moduleWrapper = this._getModuleWrapper();
+    if (!moduleWrapper) {
+      return;
+    }
+
     newGroups.forEach((group) => {
       if (!volumeChangedIds.has(group.id)) {
         return;
       }
-      const groupEl = document.querySelector(`[data-group-id="${group.id}"]`);
+      const groupEl = moduleWrapper.querySelector(`[data-group-id="${group.id}"]`);
       if (!groupEl) {
         return;
       }

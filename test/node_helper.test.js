@@ -185,6 +185,33 @@ function _isHidden(group, config) {
   return false;
 }
 
+// Pure helper extracted from MMM-Sonos.js _resolveDisplayMode() for unit testing.
+function _resolveDisplayMode(displayMode, groupCount, columns) {
+  if (['grid', 'row', 'mini', 'fullscreen'].includes(displayMode)) {
+    return displayMode;
+  }
+  // auto mode
+  return groupCount > (columns || 2) ? 'grid' : 'row';
+}
+
+// Pure helper extracted from MMM-Sonos.js _resolveFullscreenGroup() for unit testing.
+function _resolveFullscreenGroup(groups, fullscreenSpeaker) {
+  if (!groups || !groups.length) {
+    return null;
+  }
+  const speaker = (fullscreenSpeaker || '').toLowerCase().trim();
+  if (speaker) {
+    const match = groups.find((g) =>
+      (g.name || '').toLowerCase() === speaker ||
+      (g.id || '').toLowerCase() === speaker ||
+      (g.coordinatorHost || '').toLowerCase() === speaker ||
+      (g.members || []).some((m) => m.toLowerCase() === speaker)
+    );
+    return match || groups[0];
+  }
+  return groups[0];
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -664,5 +691,79 @@ describe('_isHidden() – whitelist/blacklist filtering', () => {
   it('blacklist takes precedence over whitelist', () => {
     // Group matches whitelist but also matches blacklist — should be hidden
     assert.equal(_isHidden(group, { hiddenGroups: ['Stue'], allowedGroups: ['Stue'] }), true);
+  });
+});
+
+describe('_resolveDisplayMode()', () => {
+  it('returns "fullscreen" when configured', () => {
+    assert.equal(_resolveDisplayMode('fullscreen', 3, 2), 'fullscreen');
+  });
+
+  it('returns "mini" when configured', () => {
+    assert.equal(_resolveDisplayMode('mini', 3, 2), 'mini');
+  });
+
+  it('returns "grid" when configured explicitly', () => {
+    assert.equal(_resolveDisplayMode('grid', 1, 2), 'grid');
+  });
+
+  it('returns "row" when configured explicitly', () => {
+    assert.equal(_resolveDisplayMode('row', 5, 2), 'row');
+  });
+
+  it('returns "grid" in auto mode when groupCount exceeds columns', () => {
+    assert.equal(_resolveDisplayMode('auto', 3, 2), 'grid');
+  });
+
+  it('returns "row" in auto mode when groupCount does not exceed columns', () => {
+    assert.equal(_resolveDisplayMode('auto', 2, 2), 'row');
+  });
+
+  it('falls back to "row" in auto mode for unknown/null displayMode', () => {
+    assert.equal(_resolveDisplayMode(null, 1, 2), 'row');
+  });
+});
+
+describe('_resolveFullscreenGroup()', () => {
+  const groups = [
+    { id: 'RINCON_A:1', name: 'Stue', coordinatorHost: '192.168.1.10', members: ['Stue', 'Hall'] },
+    { id: 'RINCON_B:1', name: 'Kjøkken', coordinatorHost: '192.168.1.20', members: ['Kjøkken'] },
+    { id: 'RINCON_C:1', name: 'Soverom', coordinatorHost: '192.168.1.30', members: ['Soverom'] }
+  ];
+
+  it('returns first group when fullscreenSpeaker is null', () => {
+    assert.equal(_resolveFullscreenGroup(groups, null), groups[0]);
+  });
+
+  it('returns first group when fullscreenSpeaker is empty string', () => {
+    assert.equal(_resolveFullscreenGroup(groups, ''), groups[0]);
+  });
+
+  it('matches by group name (case-insensitive)', () => {
+    assert.equal(_resolveFullscreenGroup(groups, 'kjøkken'), groups[1]);
+  });
+
+  it('matches by group ID', () => {
+    assert.equal(_resolveFullscreenGroup(groups, 'RINCON_C:1'), groups[2]);
+  });
+
+  it('matches by coordinator IP', () => {
+    assert.equal(_resolveFullscreenGroup(groups, '192.168.1.20'), groups[1]);
+  });
+
+  it('matches by member name', () => {
+    assert.equal(_resolveFullscreenGroup(groups, 'hall'), groups[0]);
+  });
+
+  it('falls back to first group when no match is found', () => {
+    assert.equal(_resolveFullscreenGroup(groups, 'BadRoom'), groups[0]);
+  });
+
+  it('returns null when groups array is empty', () => {
+    assert.equal(_resolveFullscreenGroup([], 'Stue'), null);
+  });
+
+  it('returns null when groups is null', () => {
+    assert.equal(_resolveFullscreenGroup(null, null), null);
   });
 });

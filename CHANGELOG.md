@@ -8,6 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Fullscreen mode** (`displayMode: 'fullscreen'`) — renders a single speaker's now-playing info as a large, full-width card with prominent album art (configurable via `fullscreenAlbumArtSize`, default: 300 px). Ideal for a dedicated MagicMirror page.
+  - New `fullscreenSpeaker` option — pin the card to a specific speaker by name, group name, group ID, or coordinator IP; defaults to the first currently-playing group when `null`
+  - New `fullscreenAlbumArtSize` option (default: `300`) — album art size in pixels for fullscreen mode
+  - New `fullscreenWidth` option (default: `null`) — optional max-width constraint for the fullscreen wrapper
+  - All standard display options (`showAlbum`, `showProgress`, `showVolume`, `showGroupMembers`, `albumArtColors`, `transitionAnimation`, etc.) work in fullscreen mode
+- **Dual-mode independence** — each module instance now scopes all in-place DOM operations (per-card animation, progress bar updates, volume updates) to its own wrapper via `data-module-id`. Previously, `document.querySelector` would find elements from the first matching instance in the document, causing cross-instance interference.
+
+### Changed
+- Per-card track-change animation now works correctly in **all** display modes including `fullscreen`; only the affected card animates — structural changes still trigger a full re-render
+- `--mmm-sonos-gap` default increased from `0.65rem` to `0.75rem` for slightly more breathing room between cards in row and grid modes
+- Card `flex-basis` is no longer set via inline style — the CSS class (`flex: 1 1 var(--mmm-sonos-card-min)`) now controls it in all non-row modes. In row mode (`flex: 0 0 auto`) this prevents long titles from overflowing a fixed-width card and visually overlapping adjacent cards.
+- README updated: Highlights, Configuration Examples, Configuration table, and Additional features reflect fullscreen mode and all new options
+
+### Fixed
+- **Normal mode + mini mode dual-instance bug (Issues 1 & 2):** When both a normal-mode and a mini-mode instance were active simultaneously, `document.querySelector('[data-group-id="..."]')` found the first matching element in the entire document instead of the element belonging to the calling instance. This caused the normal-mode instance to replace mini-mode cards with full-size cards on track changes (mini grew to normal size), and left the normal-mode cards stale (no visible track-change update). Fixed by scoping all in-place DOM queries to `[data-module-id]`, a unique attribute set on each module wrapper in `getDom()`.
+- **Slow initial load (Issue 3):** When the frontend reconnected and sent `SONOS_CONFIG`, `node_helper._configure()` always ran a full 5-second Sonos re-discovery even if a coordinator was already known from the startup phase. Now, if a coordinator is already set, data is served immediately and re-discovery runs silently in the background, eliminating the startup stall.
+- **Layout overlap in row/grid mode (Issue 4):** Setting `container.style.flexBasis` to the card's `cardMinWidth` as an inline style overrode the mode-specific CSS `flex` shorthand. In row mode (`flex: 0 0 auto`, which sets `flex-basis: auto`), the inline override fixed the card at exactly 150 px; content wider than that (long titles, artist names) overflowed the card boundary and visually overlapped the adjacent card. Removed the inline `flexBasis` override so the CSS controls flex behaviour correctly in every mode.
+
+### Added (previous entries)
 - **Mini mode** (`displayMode: 'mini'`) — compact single-row cards showing a small thumbnail, group name badge, track title, and optional artist; ideal for a small corner of the display
   - New `miniAlbumArtSize` option (default: `40`) — thumbnail size in pixels
   - New `miniShowGroupName` option (default: `true`) — show room name badge

@@ -15,9 +15,10 @@ A MagicMirror² module that automatically discovers your Sonos zones and shows w
 - 🔊 Volume display with dynamic icons showing current volume level.
 - 🧩 Groups are presented as a single unit (no duplicate speakers when they’re grouped).
 - 🙈 Hide specific speakers or groups directly from the configuration – or use whitelists to show only what you want.
-- 🧱 Flexible layouts: row, grid, mini, or automatic based on the number of groups.
+- 🧱 Flexible layouts: row, grid, mini, fullscreen, or automatic based on the number of groups.
+- 🖥️ Fullscreen mode – display a single speaker's now-playing info as a prominent, full-width card with large album art and bold text. Perfect for a dedicated page in MagicMirror's page manager.
 - 🎨 Accent colours derived from album art for a vibrant, personalised card background.
-- ✨ Animated track transitions (fade, slide, scale) with per-card updates in mini mode.
+- ✨ Animated track transitions (fade, slide, scale) with per-card updates in all display modes.
 - 📻 Enhanced radio metadata – station names, logos, and live "now playing" info.
 - 🔠 Adjust text size, album art size, max groups, and module width via config.
 - 🧭 Control alignment without extra CSS – choose left, center, right, or distributed spacing.
@@ -97,7 +98,7 @@ An example showing all available configuration options:
     knownDevices: [],                // Array of static Sonos IPs for fallback
     
     // Display mode and layout
-    displayMode: 'row',              // 'row', 'grid', 'mini', or 'auto'
+    displayMode: 'row',              // 'row', 'grid', 'mini', 'fullscreen', or 'auto'
     columns: 2,                      // Number of columns in grid mode (1-4)
     maxGroups: 6,                    // Maximum groups to display
     moduleWidth: null,               // Constrain width (e.g., "600px" or "80%")
@@ -157,6 +158,12 @@ An example showing all available configuration options:
     miniShowSource: false,           // Show playback source label in mini-mode
     miniWidth: null,                 // Constrain mini-mode card width (e.g., 400 or '400px')
 
+    // Fullscreen-mode options (displayMode: 'fullscreen')
+    fullscreenSpeaker: null,         // Speaker/group to show; null = first playing speaker
+                                     // Accepts speaker name, group name, group ID, or coordinator IP
+    fullscreenAlbumArtSize: 300,     // Album art size in pixels for fullscreen mode
+    fullscreenWidth: null,           // Constrain fullscreen wrapper width (e.g., 600 or '600px')
+
     // Album art caching
     cacheAlbumArt: true,             // Cache album art locally for faster loading on slow networks
     albumArtCacheTTL: 2592000000,    // How long to keep cached images (ms). Common values:
@@ -206,7 +213,7 @@ Restart MagicMirror² afterwards to load the latest code.
 | `allowedGroups` | `[]` | **Whitelist**: only show groups whose name, ID, or coordinator IP appears in this list. When empty, all groups are shown. |
 | `knownDevices` | `[]` | List of static Sonos IPs to try when automatic discovery fails. |
 | `maxGroups` | `6` | Maximum number of groups to render. Handy for large Sonos setups. |
-| `displayMode` | `'row'` | `auto`, `grid`, `row`, or `mini`. `row` keeps groups on a single horizontal line with scrolling if required. `grid` arranges cards across `columns` columns. `auto` switches to grid when the number of groups exceeds `columns`. `mini` renders each group as a compact single-row card (thumbnail + title). |
+| `displayMode` | `'row'` | `auto`, `grid`, `row`, `mini`, or `fullscreen`. `row` keeps groups on a single horizontal line with scrolling if required. `grid` arranges cards across `columns` columns. `auto` switches to grid when the number of groups exceeds `columns`. `mini` renders each group as a compact single-row card (thumbnail + title). `fullscreen` shows a single speaker as a large, full-width card with prominent album art. |
 | `columns` | `2` | Number of columns in grid mode (1–4). Also used as the threshold when `displayMode` is `auto`. |
 | `fontScale` | `1` | Multiplier for text size. `1.2` increases text by 20%. |
 | `textSize` | `null` | Override text size in pixels (e.g., `16` or `20`). When set, this overrides `fontScale`. |
@@ -241,6 +248,9 @@ Restart MagicMirror² afterwards to load the latest code.
 | `miniShowArtist` | `true` | Append the artist to the title line in `mini` mode (`"Track · Artist"`). |
 | `miniShowSource` | `false` | Show the playback source label (Spotify, Radio, etc.) in `mini` mode. |
 | `miniWidth` | `null` | Constrain the width of each mini-mode card (e.g., `400` or `'400px'`). |
+| `fullscreenSpeaker` | `null` | Speaker/group to display in `fullscreen` mode. Accepts a speaker name, group name, group ID, or coordinator IP. When `null`, the first playing group is used. |
+| `fullscreenAlbumArtSize` | `300` | Album art size in pixels for `fullscreen` mode cards. |
+| `fullscreenWidth` | `null` | Constrain the fullscreen wrapper width (e.g., `600` or `'600px'`). |
 | `cacheAlbumArt` | `true` | Download and cache album art images locally so they load instantly on subsequent polls. Cached files are stored in `<module>/cache/album-art/` and served by MagicMirror's built-in static file server. |
 | `albumArtCacheTTL` | `2592000000` | How long (in milliseconds) to keep a cached image before re-downloading it. Set to `0` to cache images forever and never expire them. Common values: 30 days = `2592000000`, 90 days = `7776000000`, 120 days = `10368000000`, 365 days = `31536000000`. |
 | `clearCacheOnStart` | `false` | When `true`, all locally cached album art images are deleted every time the module starts. Useful after a config change or to reclaim disk space. |
@@ -302,16 +312,68 @@ Each row shows:
 | `miniShowSource` | `false` | Show a small label below the title indicating the playback source (Spotify, Apple Music, Radio, etc.). |
 | `miniWidth` | `null` | Set a maximum pixel width for each mini row (e.g. `320` or `'320px'`). Useful when placing the module in a narrow sidebar. |
 
+### Fullscreen mode
+
+`displayMode: 'fullscreen'` renders a single speaker's now-playing info as a large, full-width card — ideal for a dedicated MagicMirror page (e.g. using a page manager module) where you want Sonos info front-and-centre with a prominent album art display.
+
+**Example configuration:**
+
+```javascript
+{
+  module: 'MMM-Sonos',
+  position: 'fullscreen_below',
+  config: {
+    displayMode: 'fullscreen',
+    fullscreenSpeaker: 'Stue',      // optional: which speaker to show (null = first playing)
+    fullscreenAlbumArtSize: 300,    // album art size in pixels (default 300)
+    fullscreenWidth: null,          // optional: constrain width (e.g. 600 or '600px')
+    showAlbum: true,                // show album name under artist
+    showProgress: true,             // show progress bar and time
+    showVolume: true,               // show volume level
+    showGroupMembers: true,         // show which rooms are in the group
+    transitionAnimation: 'fade',    // animation when track changes
+    albumArtColors: true,           // tint card with album art dominant colour
+    cacheAlbumArt: true             // required for albumArtColors
+  }
+}
+```
+
+The fullscreen card shows:
+- **Album art** — large square image (configurable with `fullscreenAlbumArtSize`)
+- **Group name** — small uppercase badge identifying the speaker/group
+- **Track title** — large, bold, up to 2 lines
+- **Artist** — beneath the title
+- **Album** — when `showAlbum: true`
+- **Playback source** — when `showPlaybackSource: true`
+- **Progress bar** — when `showProgress: true` and duration is known
+- **Volume** — when `showVolume: true`
+- **Group members** — when `showGroupMembers: true` and there are multiple members
+
+Use `fullscreenSpeaker` to pin the card to a specific speaker. The value can be a speaker name (e.g. `'Stue'`), group name, group ID, or coordinator IP. When left as `null`, the first group that is currently playing is shown.
+
+> **Tip:** Combine fullscreen mode with a page-manager module to automatically switch to the fullscreen page whenever music is playing. Use `allowedSpeakers` to restrict the module to a single room, and set `fullscreenSpeaker` to the same room name for a dedicated room display.
+
+**Fullscreen mode option reference:**
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `fullscreenSpeaker` | `null` | Speaker/group to show. Accepts a speaker name, group name, group ID, or coordinator IP. When `null`, the first currently-playing group is used. |
+| `fullscreenAlbumArtSize` | `300` | Album art size in pixels. |
+| `fullscreenWidth` | `null` | Set a maximum width for the fullscreen card (e.g. `600` or `'600px'`). |
+
 ## Additional features
 
 - **Automatic re-discovery:** If the Sonos device drops off the network, the module will try to find it again.
+- **Fast initial load:** When the frontend reconnects (e.g. after a browser refresh), data is served immediately if a coordinator was already discovered during startup — no 5-second re-discovery stall on every reconnect.
 - **HTTPS-friendly album art:** Set `forceHttps: true` when your mirror runs behind an HTTPS proxy and browsers block mixed content.
-- **Responsive layout:** The `row`, `grid`, `auto`, and `mini` layouts adapt to any display size.
+- **Responsive layout:** The `row`, `grid`, `auto`, `mini`, and `fullscreen` layouts adapt to any display size.
 - **Snappy updates:** Polling combined with caching keeps the UI fresh without noticeable lag.
 - **Local album art cache:** Album art images are downloaded once and served from disk on subsequent polls, giving instant display even on slow networks. See the `cacheAlbumArt`, `albumArtCacheTTL`, and `clearCacheOnStart` options above.
 - **Accent colours:** Enable `albumArtColors: true` (with `cacheAlbumArt: true`) to automatically tint each card with the dominant colour extracted from its album art.
-- **Smooth transitions:** Track changes animate in/out with configurable styles (`transitionAnimation`) and duration (`transitionDuration`). In `mini` mode, only the changing card is animated — the rest stay put.
+- **Smooth transitions:** Track changes animate in/out with configurable styles (`transitionAnimation`) and duration (`transitionDuration`). In all modes (mini, row, grid, fullscreen), only the changing card is animated — the rest stay put.
 - **Mini mode:** `displayMode: 'mini'` renders a compact stacked list of now-playing rows — ideal for a small corner of your display.
+- **Fullscreen mode:** `displayMode: 'fullscreen'` shows a single speaker as a large card with prominent album art — ideal for a dedicated MagicMirror page.
+- **Dual-mode support:** You can add MMM-Sonos twice in your config (e.g. once as `mini` in a corner and once as `fullscreen` on a separate page). Each instance is fully independent — track changes update each instance correctly without cross-contamination.
 - **Apple Music support:** The module correctly identifies and labels Apple Music streams.
 - **Improved radio metadata:** Station names, logos, and "now playing" stream content are extracted from the Sonos AVTransport metadata for a richer display.
 - **Whitelist filtering:** Use `allowedGroups` / `allowedSpeakers` to restrict the module to only the rooms or groups you care about, without needing to list every other room as hidden.

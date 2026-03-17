@@ -83,7 +83,21 @@ module.exports = NodeHelper.create({
     }
 
     this._clearTimer();
-    await this._discover();
+
+    // If a coordinator is already known from a previous discovery or startup,
+    // skip the blocking re-discovery and serve data immediately. This prevents
+    // a 5-second stall every time the frontend reconnects and sends SONOS_CONFIG.
+    // A background re-discovery still runs so any device changes are picked up.
+    if (this.coordinator) {
+      this.sendDebug('Coordinator already known — skipping blocking re-discovery');
+      this._refresh();
+      // Background re-discovery: update coordinator silently without blocking
+      this._discover().catch((error) => {
+        this.sendDebug('Background re-discovery failed', error?.message || error);
+      });
+    } else {
+      await this._discover();
+    }
 
     if (this.config.cacheAlbumArt) {
       if (this.config.clearCacheOnStart) {
