@@ -116,6 +116,7 @@ An example showing all available configuration options:
     
     // Card layout
     cardMinWidth: 150,               // Minimum card width in pixels
+    cardMaxWidth: null,              // Maximum card width in pixels (null = no limit)
     justifyContent: 'center',        // Horizontal distribution: 'flex-start', 'center', 'space-between', etc.
     
     // Visibility and filtering
@@ -234,7 +235,8 @@ Restart MagicMirror² afterwards to load the latest code.
 | `dateLocale` | `'en-US'` | Locale for timestamp formatting. |
 | `accentuateActive` | `true` | Highlight actively playing groups with a stronger background. |
 | `showAlbum` | `false` | Display album title under the artist when available. |
-| `cardMinWidth` | `150` | Minimum width for each card, used to adapt row/grid layouts. |
+| `cardMinWidth` | `150` | Minimum width for each card in pixels, used to adapt row/grid layouts. In row mode, cards are given a fixed width equal to this value so that `wrapText` and `maxTextLines` work correctly. |
+| `cardMaxWidth` | `null` | Maximum width for each card in pixels. When set, cards will not grow beyond this width in any display mode. Use together with `cardMinWidth` to create fixed-size cards. |
 | `showPlaybackSource` | `true` | Display the playback source icon and label (Spotify, Apple Music, Radio, Line-in, etc.). Icons automatically adjust based on the source. |
 | `showProgress` | `true` | Show a progress bar and time counter for the current track. Only displayed when track position and duration information is available. |
 | `showVolume` | `true` | Display the current volume level with an icon that changes based on volume (muted, low, medium, high). |

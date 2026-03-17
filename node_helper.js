@@ -84,6 +84,11 @@ module.exports = NodeHelper.create({
 
     this._clearTimer();
 
+    // Track whether the coordinator was already known BEFORE this configure call.
+    // When already known, we call _refresh() immediately (line below) and skip
+    // the second _refresh() at the end of this function to avoid a double-animation.
+    const coordinatorWasKnown = !!this.coordinator;
+
     // If a coordinator is already known from a previous discovery or startup,
     // skip the blocking re-discovery and serve data immediately. This prevents
     // a 5-second stall every time the frontend reconnects and sends SONOS_CONFIG.
@@ -111,7 +116,12 @@ module.exports = NodeHelper.create({
       this.updateTimer = setInterval(() => this._refresh(), Math.max(this.config.updateInterval, 5000));
     }
 
-    this._refresh();
+    // Only call _refresh() here when the coordinator was NOT already known above.
+    // When it was already known, _refresh() was already called above to serve data
+    // immediately — calling it again here would cause a double-refresh and double-animation.
+    if (!coordinatorWasKnown) {
+      this._refresh();
+    }
   },
 
   async _discover() {

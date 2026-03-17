@@ -598,6 +598,166 @@ describe('_parseDIDL()', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Inline copy of the _analyzeChanges logic from MMM-Sonos.js (frontend).
+// Tests the fix for Issue 4: PLAYING ↔ TRANSITIONING ↔ BUFFERING state
+// transitions during a track change should NOT trigger a full re-render.
+// ---------------------------------------------------------------------------
+
+const NONE_RESULT = { needsFull: false, changedIds: new Set(), volumeChangedIds: new Set() };
+
+function _analyzeChanges(currentGroups, newGroups, lastUpdated, newTimestamp) {
+  const none = NONE_RESULT;
+
+  if (!newGroups) return none;
+  if (!currentGroups || currentGroups.length === 0) {
+    return newGroups.length > 0
+      ? { needsFull: true, changedIds: new Set(), volumeChangedIds: new Set() }
+      : none;
+  }
+
+  if (newGroups.length === 0) {
+    return currentGroups.length !== 0
+      ? { needsFull: true, changedIds: new Set(), volumeChangedIds: new Set() }
+      : none;
+  }
+
+  if (currentGroups.length !== newGroups.length) {
+    return { needsFull: true, changedIds: new Set(), volumeChangedIds: new Set() };
+  }
+
+  const oldGroupMap = new Map();
+  currentGroups.forEach((g) => { if (g.id) oldGroupMap.set(g.id, g); });
+
+  const isPlayingLike = (s) => ['playing', 'transitioning', 'buffering'].includes((s || '').toLowerCase());
+
+  const timeElapsed = lastUpdated ? (newTimestamp - lastUpdated) / 1000 : 0;
+  const changedIds = new Set();
+  const volumeChangedIds = new Set();
+
+  for (const newGroup of newGroups) {
+    const oldGroup = oldGroupMap.get(newGroup.id);
+    if (!oldGroup) return { needsFull: true, changedIds: new Set(), volumeChangedIds: new Set() };
+
+    const playbackStateChanged = oldGroup.playbackState !== newGroup.playbackState;
+    const playbackStateIsStructural = playbackStateChanged &&
+      !(isPlayingLike(oldGroup.playbackState) && isPlayingLike(newGroup.playbackState));
+
+    if (oldGroup.name !== newGroup.name || playbackStateIsStructural || oldGroup.source !== newGroup.source) {
+      return { needsFull: true, changedIds: new Set(), volumeChangedIds: new Set() };
+    }
+
+    if (oldGroup.members?.length !== newGroup.members?.length) {
+      return { needsFull: true, changedIds: new Set(), volumeChangedIds: new Set() };
+    }
+
+    if (oldGroup.title !== newGroup.title ||
+        oldGroup.artist !== newGroup.artist ||
+        oldGroup.album !== newGroup.album ||
+        oldGroup.albumArt !== newGroup.albumArt ||
+        oldGroup.duration !== newGroup.duration) {
+      changedIds.add(newGroup.id);
+      continue;
+    }
+
+    if (oldGroup.position != null && newGroup.position != null) {
+      const diff = Math.abs(newGroup.position - (oldGroup.position + timeElapsed));
+      if (diff > 3) {
+        changedIds.add(newGroup.id);
+        continue;
+      }
+    }
+
+    if (oldGroup.volume !== newGroup.volume) {
+      volumeChangedIds.add(newGroup.id);
+    }
+  }
+
+  return { needsFull: false, changedIds, volumeChangedIds };
+}
+
+describe('_analyzeChanges() – playing-like state transitions (Issue 4)', () => {
+  const makeGroup = (overrides = {}) => ({
+    id: 'group-1',
+    name: 'Living Room',
+    playbackState: 'playing',
+    title: 'Song Title',
+    artist: 'Artist',
+    album: 'Album',
+    albumArt: 'http://example.com/art.jpg',
+    source: 'spotify',
+    members: ['Speaker A'],
+    volume: 50,
+    duration: 240,
+    position: 30,
+    ...overrides
+  });
+
+  it('returns needsFull: false for PLAYING → TRANSITIONING (same track, within playing-like group)', () => {
+    const current = [makeGroup({ playbackState: 'playing' })];
+    const next = [makeGroup({ playbackState: 'transitioning' })];
+    const result = _analyzeChanges(current, next, Date.now() - 1000, Date.now());
+    assert.equal(result.needsFull, false);
+  });
+
+  it('returns needsFull: false for TRANSITIONING → PLAYING (same track)', () => {
+    const current = [makeGroup({ playbackState: 'transitioning' })];
+    const next = [makeGroup({ playbackState: 'playing' })];
+    const result = _analyzeChanges(current, next, Date.now() - 1000, Date.now());
+    assert.equal(result.needsFull, false);
+  });
+
+  it('returns needsFull: false for PLAYING → BUFFERING (same track)', () => {
+    const current = [makeGroup({ playbackState: 'playing' })];
+    const next = [makeGroup({ playbackState: 'buffering' })];
+    const result = _analyzeChanges(current, next, Date.now() - 1000, Date.now());
+    assert.equal(result.needsFull, false);
+  });
+
+  it('returns needsFull: true for PLAYING → PAUSED (structural state change)', () => {
+    const current = [makeGroup({ playbackState: 'playing' })];
+    const next = [makeGroup({ playbackState: 'paused' })];
+    const result = _analyzeChanges(current, next, Date.now() - 1000, Date.now());
+    assert.equal(result.needsFull, true);
+  });
+
+  it('returns needsFull: true for PLAYING → STOPPED (structural state change)', () => {
+    const current = [makeGroup({ playbackState: 'playing' })];
+    const next = [makeGroup({ playbackState: 'stopped' })];
+    const result = _analyzeChanges(current, next, Date.now() - 1000, Date.now());
+    assert.equal(result.needsFull, true);
+  });
+
+  it('adds group id to changedIds when title changes during PLAYING → TRANSITIONING', () => {
+    const current = [makeGroup({ playbackState: 'playing', title: 'Old Song' })];
+    const next = [makeGroup({ playbackState: 'transitioning', title: 'New Song' })];
+    const result = _analyzeChanges(current, next, Date.now() - 1000, Date.now());
+    assert.equal(result.needsFull, false);
+    assert.equal(result.changedIds.has('group-1'), true);
+  });
+
+  it('adds to volumeChangedIds for volume-only change (no animation needed)', () => {
+    const current = [makeGroup({ volume: 50 })];
+    const next = [makeGroup({ volume: 60 })];
+    const result = _analyzeChanges(current, next, Date.now() - 1000, Date.now());
+    assert.equal(result.needsFull, false);
+    assert.equal(result.changedIds.size, 0);
+    assert.equal(result.volumeChangedIds.has('group-1'), true);
+  });
+
+  it('returns needsFull: true when group count changes (new group appears)', () => {
+    const current = [makeGroup()];
+    const next = [makeGroup(), makeGroup({ id: 'group-2', name: 'Kitchen' })];
+    const result = _analyzeChanges(current, next, Date.now() - 1000, Date.now());
+    assert.equal(result.needsFull, true);
+  });
+
+  it('returns needsFull: true when first data arrives (empty → groups)', () => {
+    const result = _analyzeChanges([], [makeGroup()], null, Date.now());
+    assert.equal(result.needsFull, true);
+  });
+});
+
 describe('_buildRadioArtUrl()', () => {
   it('builds correct HTTP URL for radio stream', () => {
     const url = _buildRadioArtUrl('x-sonosapi-stream:s1234', '192.168.1.10', 1400, false);
