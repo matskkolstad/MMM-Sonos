@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`cardMaxWidth` option** (default: `null`) — sets a maximum width for each card, complementing `cardMinWidth`. Useful in row mode to prevent very wide cards when content is short and text wrapping is enabled. Example: `cardMaxWidth: 300` or `cardMaxWidth: '300px'`.
+
+### Changed
+- **`wrapText: true` + `maxTextLines` now works correctly in row mode** — cards in row mode now use a fixed width equal to `cardMinWidth` (instead of growing freely to fit content). This means long titles wrap to `maxTextLines` lines as intended, rather than extending the card horizontally.
+- **`showPlaybackState` badge is now shown on the same line as the speaker name** — previously the state ("Playing", "Paused") appeared below the name in a separate row; it is now displayed inline to the right of the name.
+- **Track changes only animate the affected card** — transitions between playing-like states (PLAYING ↔ TRANSITIONING ↔ BUFFERING) during a track change no longer trigger a full module re-render. Only the card whose track actually changed animates.
+- **Full-module animation is debounced** — rapid successive data updates (e.g. on page load or media change) are now collapsed into a single animation, preventing the 2–3 reload flashes previously seen.
+- **Eliminated double-refresh on reconnect** — `node_helper._configure()` previously called `_refresh()` twice when the coordinator was already known (once immediately, once at the end of the function). The duplicate call is now skipped.
+
+### Fixed
 - **Fullscreen mode** (`displayMode: 'fullscreen'`) — renders a single speaker's now-playing info as a large, full-width card with prominent album art (configurable via `fullscreenAlbumArtSize`, default: 300 px). Ideal for a dedicated MagicMirror page.
   - New `fullscreenSpeaker` option — pin the card to a specific speaker by name, group name, group ID, or coordinator IP; defaults to the first currently-playing group when `null`
   - New `fullscreenAlbumArtSize` option (default: `300`) — album art size in pixels for fullscreen mode

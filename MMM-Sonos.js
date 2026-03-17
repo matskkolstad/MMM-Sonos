@@ -30,6 +30,7 @@ Module.register('MMM-Sonos', {
     accentuateActive: true,
     showAlbum: false,
     cardMinWidth: 150,
+    cardMaxWidth: null,
     showTvSource: true,
     showTvIcon: true,
     tvIcon: '📺',
@@ -73,6 +74,7 @@ Module.register('MMM-Sonos', {
     this.updateTimer = null;
     this.progressAnimationTimer = null;
     this._animTransitionTimer = null;
+    this._fullUpdateDebounceTimer = null;
 
   this._log('Starting MMM-Sonos module');
     this.sendSocketNotification('SONOS_CONFIG', this.config);
@@ -92,6 +94,10 @@ Module.register('MMM-Sonos', {
     if (this._animTransitionTimer) {
       clearTimeout(this._animTransitionTimer);
       this._animTransitionTimer = null;
+    }
+    if (this._fullUpdateDebounceTimer) {
+      clearTimeout(this._fullUpdateDebounceTimer);
+      this._fullUpdateDebounceTimer = null;
     }
   },
 
@@ -246,6 +252,10 @@ Module.register('MMM-Sonos', {
     if (cardMinValue) {
       wrapper.style.setProperty('--mmm-sonos-card-min', cardMinValue);
     }
+    const cardMaxValue = this._coercePixelValue(this.config.cardMaxWidth, null);
+    if (cardMaxValue) {
+      wrapper.style.setProperty('--mmm-sonos-card-max', cardMaxValue);
+    }
     wrapper.style.justifyContent = this.config.justifyContent;
     wrapper.style.textAlign = this._mapTextAlign(this.config.textAlignment);
 
@@ -366,10 +376,12 @@ Module.register('MMM-Sonos', {
     const cardWidth = Number(this.config.cardMinWidth);
     if (!Number.isNaN(cardWidth) && cardWidth > 0) {
       container.style.minWidth = `${cardWidth}px`;
-      // Do not set flexBasis inline — the CSS class already handles it via
-      // --mmm-sonos-card-min. Setting flexBasis inline would override the
-      // mode-specific CSS (e.g. 'flex: 0 0 auto' for row mode) and cause
-      // content to overflow fixed-width cards, creating visual overlap.
+    }
+
+    // Apply cardMaxWidth constraint when configured (issue 3)
+    const cardMaxValue = this._coercePixelValue(this.config.cardMaxWidth, null);
+    if (cardMaxValue) {
+      container.style.maxWidth = cardMaxValue;
     }
 
     if (this.config.accentuateActive && isPlaying) {
@@ -497,18 +509,19 @@ Module.register('MMM-Sonos', {
     const header = document.createElement('div');
     header.className = 'mmm-sonos__header';
     header.style.display = 'flex';
-    header.style.flexDirection = 'column';
-    header.style.gap = '0.25rem';
+    header.style.flexDirection = 'row';
+    header.style.alignItems = 'center';
+    header.style.gap = '0.35rem';
 
     // Align header based on textAlignment (matches container's text-align)
     if (alignment === 'center') {
-      header.style.alignItems = 'center';
+      header.style.justifyContent = 'center';
     } else if (alignment === 'left') {
-      // Text on left: align items to flex-end (right) to hug album on the right
-      header.style.alignItems = 'flex-end';
+      // Text on left: align to flex-end (right) to hug album on the right
+      header.style.justifyContent = 'flex-end';
     } else if (alignment === 'right') {
-      // Text on right: align items to flex-start (left) to hug album on the left
-      header.style.alignItems = 'flex-start';
+      // Text on right: align to flex-start (left) to hug album on the left
+      header.style.justifyContent = 'flex-start';
     }
 
     const groupName = document.createElement('span');
@@ -520,7 +533,6 @@ Module.register('MMM-Sonos', {
       const state = document.createElement('span');
       state.className = 'mmm-sonos__state';
       state.innerText = this.translate(group.playbackState.toUpperCase()) || group.playbackState;
-      state.style.alignSelf = 'center';
       header.appendChild(state);
     }
 
@@ -1077,6 +1089,11 @@ Module.register('MMM-Sonos', {
     const oldGroupMap = new Map();
     this.groups.forEach((g) => { if (g.id) oldGroupMap.set(g.id, g); });
 
+    // States that are all considered "actively playing" — transitions between them
+    // should NOT trigger a full re-render. Only a change from/to a truly different
+    // state (paused, stopped, etc.) is a structural change requiring full re-render.
+    const isPlayingLike = (s) => ['playing', 'transitioning', 'buffering'].includes((s || '').toLowerCase());
+
     const timeElapsed = this.lastUpdated ? (newTimestamp - this.lastUpdated) / 1000 : 0;
     const changedIds = new Set();
     const volumeChangedIds = new Set();
@@ -1086,8 +1103,14 @@ Module.register('MMM-Sonos', {
       if (!oldGroup) return { needsFull: true, changedIds: new Set(), volumeChangedIds: new Set() };
 
       // Structural changes → full re-render
+      // Playback state changes between playing-like states (PLAYING ↔ TRANSITIONING ↔ BUFFERING)
+      // during a track change are NOT treated as structural — they only trigger per-card animation.
+      const playbackStateChanged = oldGroup.playbackState !== newGroup.playbackState;
+      const playbackStateIsStructural = playbackStateChanged &&
+        !(isPlayingLike(oldGroup.playbackState) && isPlayingLike(newGroup.playbackState));
+
       if (oldGroup.name !== newGroup.name ||
-          oldGroup.playbackState !== newGroup.playbackState ||
+          playbackStateIsStructural ||
           oldGroup.source !== newGroup.source) {
         return { needsFull: true, changedIds: new Set(), volumeChangedIds: new Set() };
       }
@@ -1209,7 +1232,24 @@ Module.register('MMM-Sonos', {
 
   // Use MagicMirror's built-in animate.css integration for full-module transitions
   // (structural changes: new group appeared, group removed, playback state changed, etc.)
+  // Debounced: if called multiple times within a short window, only the last call fires.
+  // This prevents double-animation when rapid successive SONOS_DATA notifications arrive
+  // (e.g. PLAYING → TRANSITIONING → PLAYING during a track change on initial load).
   _animatedUpdateDom() {
+    const debounceMs = 300;
+
+    if (this._fullUpdateDebounceTimer) {
+      clearTimeout(this._fullUpdateDebounceTimer);
+      this._fullUpdateDebounceTimer = null;
+    }
+
+    this._fullUpdateDebounceTimer = setTimeout(() => {
+      this._fullUpdateDebounceTimer = null;
+      this._executeAnimatedUpdateDom();
+    }, debounceMs);
+  },
+
+  _executeAnimatedUpdateDom() {
     const animation = (this.config.transitionAnimation || 'fade').toLowerCase();
     if (animation === 'none') {
       this.updateDom(0);

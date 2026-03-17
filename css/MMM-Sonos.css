@@ -7,6 +7,7 @@
   --mmm-sonos-active: rgba(255, 255, 255, 0.2);
   --mmm-sonos-paused: rgba(255, 255, 255, 0.08);
   --mmm-sonos-card-min: 150px;
+  --mmm-sonos-card-max: none;
 }
 
 .mmm-sonos {
@@ -56,11 +57,12 @@
   padding: 0.55rem 0.65rem;
   border-radius: var(--mmm-sonos-border-radius);
   min-width: var(--mmm-sonos-card-min);
+  max-width: var(--mmm-sonos-card-max, 100%);
   box-shadow: 0 20px 40px -24px rgba(0, 0, 0, 0.65);
   position: relative;
   transition: transform 0.3s ease, box-shadow 0.3s ease, background 0.3s ease, opacity 0.3s ease;
   flex: 1 1 var(--mmm-sonos-card-min);
-  max-width: 100%;
+  overflow: hidden;
 }
 
 .mmm-sonos--mode-grid .mmm-sonos__group {
@@ -69,8 +71,10 @@
 }
 
 .mmm-sonos--mode-row .mmm-sonos__group {
-  flex: 0 0 auto;
+  flex: 0 0 var(--mmm-sonos-card-min);
+  width: var(--mmm-sonos-card-min);
   min-width: var(--mmm-sonos-card-min);
+  max-width: var(--mmm-sonos-card-max, none);
 }
 
 .mmm-sonos__group:hover {
@@ -114,12 +118,14 @@
 
 .mmm-sonos__header {
   display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   opacity: 0.85;
+  min-width: 0;
 }
 
 .mmm-sonos__group-name {
@@ -127,6 +133,8 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+  flex-shrink: 1;
 }
 
 .mmm-sonos__state {
@@ -134,6 +142,8 @@
   padding: 0.05rem 0.32rem;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.25);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .mmm-sonos__track {
