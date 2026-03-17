@@ -1,7 +1,7 @@
 :root {
   --mmm-sonos-font-scale: 1;
   --mmm-sonos-album-size: 80px;
-  --mmm-sonos-gap: 0.65rem;
+  --mmm-sonos-gap: 0.75rem;
   --mmm-sonos-border-radius: 12px;
   --mmm-sonos-bg: rgba(0, 0, 0, 0.35);
   --mmm-sonos-active: rgba(255, 255, 255, 0.2);
@@ -502,4 +502,136 @@
     rgba(var(--mmm-sonos-card-accent-rgb), var(--mmm-sonos-card-accent-opacity, 0.45)),
     rgba(0, 0, 0, 0.22)
   ) !important;
+}
+
+/* ===== FULLSCREEN MODE ===== */
+.mmm-sonos--mode-fullscreen {
+  display: flex !important;
+  flex-direction: column !important;
+  flex-wrap: nowrap !important;
+  gap: 0 !important;
+  width: 100%;
+}
+
+.mmm-sonos__fullscreen-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 1rem 1.2rem;
+  background: var(--mmm-sonos-bg);
+  border-radius: var(--mmm-sonos-border-radius);
+  box-shadow: 0 20px 40px -24px rgba(0, 0, 0, 0.65);
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+  position: relative;
+  transition: background 0.3s ease, opacity 0.3s ease;
+}
+
+.mmm-sonos__fullscreen-group.mmm-sonos__group--active {
+  background: linear-gradient(135deg, var(--mmm-sonos-active), rgba(255, 255, 255, 0.05));
+}
+
+.mmm-sonos__fullscreen-group.mmm-sonos__group--paused {
+  opacity: 0.65;
+  background: var(--mmm-sonos-paused);
+}
+
+.mmm-sonos__fullscreen-art {
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.07);
+  flex-shrink: 0;
+}
+
+.mmm-sonos__fullscreen-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.mmm-sonos__fullscreen-art.mmm-sonos__art--tv {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mmm-sonos__fullscreen-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.mmm-sonos__fullscreen-group-name {
+  font-size: 0.75em;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.65;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  text-align: center;
+}
+
+.mmm-sonos__fullscreen-title {
+  font-size: 1.4em;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-clamp: 2;
+  -webkit-line-clamp: 2;
+  width: 100%;
+  text-align: center;
+}
+
+.mmm-sonos__fullscreen-artist {
+  font-size: 1.05em;
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  text-align: center;
+}
+
+.mmm-sonos__fullscreen-album {
+  font-size: 0.85em;
+  opacity: 0.6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  text-align: center;
+}
+
+/* Accent colour on fullscreen card */
+.mmm-sonos__fullscreen-group.mmm-sonos__group--accented {
+  background: linear-gradient(
+    180deg,
+    rgba(var(--mmm-sonos-card-accent-rgb), var(--mmm-sonos-card-accent-opacity, 0.45)),
+    rgba(0, 0, 0, 0.35)
+  ) !important;
+}
+
+.mmm-sonos__fullscreen-group.mmm-sonos__group--accented.mmm-sonos__group--active {
+  background: linear-gradient(
+    180deg,
+    rgba(var(--mmm-sonos-card-accent-rgb), var(--mmm-sonos-card-accent-opacity, 0.45)),
+    rgba(255, 255, 255, 0.07)
+  ) !important;
+}
+
+.mmm-sonos__fullscreen-group.mmm-sonos__group--accented-solid {
+  background: rgba(var(--mmm-sonos-card-accent-rgb), var(--mmm-sonos-card-accent-opacity, 0.45)) !important;
 }
