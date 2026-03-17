@@ -373,9 +373,9 @@ Module.register('MMM-Sonos', {
       container.style.textAlign = 'left';
     }
 
-    const cardWidth = Number(this.config.cardMinWidth);
-    if (!Number.isNaN(cardWidth) && cardWidth > 0) {
-      container.style.minWidth = `${cardWidth}px`;
+    const cardMinValue = this._coercePixelValue(this.config.cardMinWidth, this.defaults.cardMinWidth);
+    if (cardMinValue) {
+      container.style.minWidth = cardMinValue;
     }
 
     // Apply cardMaxWidth constraint when configured (issue 3)
