@@ -83,11 +83,20 @@ Module.register('MMM-Sonos', {
     this._activeControlZoneId = null;
     this._controlOverlayEl = null;
     this._controlVolumeDebounceTimer = null;
+    this._renderedFavoritesRef = null;
+    this._renderedActiveTitle = null;
 
   this._log('Starting MMM-Sonos module');
     this.sendSocketNotification('SONOS_CONFIG', this.config);
     this.scheduleRefresh();
     this._startProgressAnimation();
+  },
+
+  // Called by MagicMirror when a page-manager (or module.hide()) hides this module.
+  // Without this, a full-viewport control overlay left open would stay stuck on
+  // screen with no way to dismiss it once the module itself is no longer visible.
+  suspend() {
+    this._closeControlOverlay();
   },
 
   stop() {
@@ -779,7 +788,15 @@ Module.register('MMM-Sonos', {
     playPauseBtn.innerText = isPlaying ? '⏸' : '▶';
     playPauseBtn.dataset.isPlaying = String(isPlaying);
     playPauseBtn.addEventListener('click', () => {
-      const notification = playPauseBtn.dataset.isPlaying === 'true' ? 'SONOS_CONTROL_PAUSE' : 'SONOS_CONTROL_PLAY';
+      const wasPlaying = playPauseBtn.dataset.isPlaying === 'true';
+      const notification = wasPlaying ? 'SONOS_CONTROL_PAUSE' : 'SONOS_CONTROL_PLAY';
+      // Optimistically flip the icon immediately — same pattern as the volume slider's
+      // instant local update — so the button doesn't feel unresponsive while waiting
+      // for the next SONOS_DATA tick to confirm. _syncControlOverlay() will correct
+      // this if the command failed or the real state differs.
+      const nowPlaying = !wasPlaying;
+      playPauseBtn.innerText = nowPlaying ? '⏸' : '▶';
+      playPauseBtn.dataset.isPlaying = String(nowPlaying);
       this.sendSocketNotification(notification, { zoneId: group.id });
     });
     sheet.appendChild(playPauseBtn);
@@ -845,7 +862,15 @@ Module.register('MMM-Sonos', {
       }
     }
 
-    this._renderControlOverlayFavorites();
+    // Only rebuild the favorites list when something that affects its rendered
+    // output actually changed — the favorites array itself, or which favorite
+    // is currently active (driven by the now-playing title). Rebuilding on every
+    // tick resets scroll position and can yank a button out from under a tap.
+    const favoritesChanged = this.favorites !== this._renderedFavoritesRef;
+    const activeTitleChanged = (group.title || null) !== this._renderedActiveTitle;
+    if (favoritesChanged || activeTitleChanged) {
+      this._renderControlOverlayFavorites();
+    }
   },
 
   _renderControlOverlayFavorites() {
@@ -859,8 +884,12 @@ Module.register('MMM-Sonos', {
     list.innerHTML = '';
 
     const group = this._findGroupById(this._activeControlZoneId);
-    const maxFavorites = this.config.maxFavorites || 12;
-    const favorites = (this.favorites || []).slice(0, maxFavorites);
+    const favorites = this.favorites || [];
+
+    // Track what we just rendered so _syncControlOverlay can skip redundant rebuilds
+    // (see _renderedFavoritesRef / _renderedActiveTitle).
+    this._renderedFavoritesRef = this.favorites;
+    this._renderedActiveTitle = group ? group.title : null;
 
     if (!favorites.length) {
       const empty = document.createElement('div');

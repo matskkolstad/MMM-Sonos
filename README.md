@@ -410,6 +410,20 @@ With `enableControls: true`:
 | `maxFavorites` | `12` | Maximum number of favorites shown in the overlay before it scrolls. |
 | `controlVolumeStep` | `5` | Step size of the volume slider in the control overlay. |
 
+#### Known limitations
+
+- `maxGroups` (default `6`) still caps how many zones are shown in control
+  mode too — a household with more than `maxGroups` zones will have some
+  zones missing from the control surface entirely, with no indication.
+  Raise `maxGroups` if you have more zones than that and want them all
+  controllable.
+- Combining `enableControls: true` with `displayMode: 'fullscreen'`, or
+  running a second `MMM-Sonos` instance alongside a control-mode instance,
+  isn't fully supported yet — fullscreen's zone-selection logic doesn't yet
+  account for control mode's widened zone set, so it can end up showing
+  "nothing visible" while music is actually playing on another zone. Stick
+  to `row`/`grid` for the control-mode instance for now.
+
 ## Additional features
 
 - **Automatic re-discovery:** If the Sonos device drops off the network, the module will try to find it again.
