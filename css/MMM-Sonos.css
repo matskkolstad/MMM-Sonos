@@ -679,23 +679,24 @@
   inset: 0;
   background: rgba(0, 0, 0, 0.75);
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
   z-index: 10000;
 }
 
 .mmm-sonos__overlay-sheet {
   width: min(480px, 92vw);
-  margin-bottom: 3vh;
+  max-height: 90vh;
+  overflow-y: auto;
   background: rgba(20, 20, 20, 0.96);
-  border-radius: 16px 16px 8px 8px;
+  border-radius: 16px;
   padding: 1.25rem;
   color: #fff;
   font-size: 1rem;
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
-  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
 }
 
 .mmm-sonos__overlay-header {
