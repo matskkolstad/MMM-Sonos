@@ -17,5 +17,8 @@
   "SOURCE_LINE_IN": "Linijski vhod",
   "SOURCE_UNKNOWN": "Neznano",
   "VOLUME": "Glasnost",
-  "SOURCE_APPLE_MUSIC": "Apple Music"
+  "SOURCE_APPLE_MUSIC": "Apple Music",
+  "SONOS_CONTROL": "Sonos",
+  "NOW_PLAYING": "Trenutno predvaja",
+  "MORE_SPEAKERS": "Več zvočnikov"
 }

@@ -17,5 +17,8 @@
   "SOURCE_LINE_IN": "线路输入",
   "SOURCE_UNKNOWN": "未知",
   "VOLUME": "音量",
-  "SOURCE_APPLE_MUSIC": "Apple Music"
+  "SOURCE_APPLE_MUSIC": "Apple Music",
+  "SONOS_CONTROL": "Sonos",
+  "NOW_PLAYING": "正在播放",
+  "MORE_SPEAKERS": "更多音箱"
 }

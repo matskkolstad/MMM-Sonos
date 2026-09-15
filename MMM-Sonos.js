@@ -21,6 +21,7 @@ Module.register('MMM-Sonos', {
     hideWhenNothingPlaying: true,
     showWhenPaused: false,
     enableControls: false,
+    controlShowIdleZones: true,
     favoritesRefreshInterval: 300000,
     maxFavorites: 12,
     controlVolumeStep: 5,
@@ -83,6 +84,7 @@ Module.register('MMM-Sonos', {
     this._activeControlZoneId = null;
     this._controlOverlayEl = null;
     this._controlVolumeDebounceTimer = null;
+    this._moreSpeakersOverlayEl = null;
     this._renderedFavoritesRef = null;
     this._renderedActiveTitle = null;
 
@@ -97,10 +99,12 @@ Module.register('MMM-Sonos', {
   // screen with no way to dismiss it once the module itself is no longer visible.
   suspend() {
     this._closeControlOverlay();
+    this._closeMoreSpeakersOverlay();
   },
 
   stop() {
     this._closeControlOverlay();
+    this._closeMoreSpeakersOverlay();
     if (this.updateTimer) {
       clearInterval(this.updateTimer);
       this.updateTimer = null;
@@ -147,6 +151,10 @@ Module.register('MMM-Sonos', {
 
         if (this.config.enableControls && this._activeControlZoneId) {
           this._syncControlOverlay();
+        }
+
+        if (this.config.enableControls && this._moreSpeakersOverlayEl) {
+          this._syncMoreSpeakersOverlay();
         }
 
         if (needsFull) {
@@ -207,6 +215,23 @@ Module.register('MMM-Sonos', {
     return [
       this.file('css/MMM-Sonos.css')
     ];
+  },
+
+  // Only supplies an automatic header when the user hasn't set their own `header`
+  // in config — an explicit header is always respected as-is. In touch control
+  // mode, "Now Playing" style config headers become misleading once idle zones
+  // are shown alongside playing ones, so we pick text that matches what's
+  // actually on screen.
+  getHeader() {
+    if (this.data.header) {
+      return this.data.header;
+    }
+    if (this.config.enableControls) {
+      return this.config.controlShowIdleZones
+        ? this.translate('SONOS_CONTROL')
+        : this.translate('NOW_PLAYING');
+    }
+    return this.data.header;
   },
 
   getTranslations() {
@@ -354,7 +379,132 @@ Module.register('MMM-Sonos', {
       wrapper.appendChild(this._renderTimestamp());
     }
 
+    if (!isMiniMode && !isFullscreenMode) {
+      const hiddenIdleZones = this._getHiddenIdleZones();
+      if (hiddenIdleZones.length > 0) {
+        wrapper.appendChild(this._renderMoreSpeakersButton(hiddenIdleZones.length));
+      }
+    }
+
     return wrapper;
+  },
+
+  _getHiddenIdleZones() {
+    if (!this.config.enableControls || this.config.controlShowIdleZones || this.config.showWhenPaused) {
+      return [];
+    }
+    return (this.groups || [])
+      .slice(0, this.config.maxGroups)
+      .filter((group) => {
+        if (this._isHidden(group)) {
+          return false;
+        }
+        const playbackState = (group.playbackState || '').toLowerCase();
+        const isPlaying = ['playing', 'transitioning', 'buffering'].includes(playbackState);
+        return !isPlaying;
+      });
+  },
+
+  _renderMoreSpeakersButton(count) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'mmm-sonos__more-speakers-btn';
+    button.innerText = '+';
+    button.setAttribute('aria-label', this.translate('MORE_SPEAKERS'));
+    button.title = this.translate('MORE_SPEAKERS');
+    if (count > 1) {
+      const badge = document.createElement('span');
+      badge.className = 'mmm-sonos__more-speakers-badge';
+      badge.innerText = String(count);
+      button.appendChild(badge);
+    }
+    button.addEventListener('click', () => this._openMoreSpeakersOverlay());
+    return button;
+  },
+
+  _openMoreSpeakersOverlay() {
+    this._buildMoreSpeakersOverlay();
+  },
+
+  _closeMoreSpeakersOverlay() {
+    if (this._moreSpeakersOverlayEl) {
+      this._moreSpeakersOverlayEl.remove();
+      this._moreSpeakersOverlayEl = null;
+    }
+  },
+
+  _buildMoreSpeakersOverlay() {
+    this._closeMoreSpeakersOverlay();
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'mmm-sonos__overlay-backdrop';
+    backdrop.dataset.moduleId = this.identifier;
+    backdrop.addEventListener('click', (event) => {
+      if (event.target === backdrop) {
+        this._closeMoreSpeakersOverlay();
+      }
+    });
+
+    const sheet = document.createElement('div');
+    sheet.className = 'mmm-sonos__overlay-sheet';
+
+    const header = document.createElement('div');
+    header.className = 'mmm-sonos__overlay-header';
+    const title = document.createElement('span');
+    title.className = 'mmm-sonos__overlay-title';
+    title.innerText = this.translate('MORE_SPEAKERS');
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'mmm-sonos__overlay-close';
+    closeBtn.innerText = '×';
+    closeBtn.setAttribute('aria-label', this.translate('CLOSE'));
+    closeBtn.addEventListener('click', () => this._closeMoreSpeakersOverlay());
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+    sheet.appendChild(header);
+
+    const list = document.createElement('div');
+    list.className = 'mmm-sonos__more-speakers-list';
+    sheet.appendChild(list);
+
+    backdrop.appendChild(sheet);
+    document.body.appendChild(backdrop);
+    this._moreSpeakersOverlayEl = backdrop;
+
+    this._renderMoreSpeakersList();
+  },
+
+  _renderMoreSpeakersList() {
+    if (!this._moreSpeakersOverlayEl) {
+      return;
+    }
+    const list = this._moreSpeakersOverlayEl.querySelector('.mmm-sonos__more-speakers-list');
+    if (!list) {
+      return;
+    }
+    list.innerHTML = '';
+
+    const zones = this._getHiddenIdleZones();
+    zones.forEach((zone) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'mmm-sonos__more-speakers-item';
+      item.innerText = zone.name || '';
+      item.addEventListener('click', () => {
+        this._closeMoreSpeakersOverlay();
+        this._openControlOverlay(zone.id);
+      });
+      list.appendChild(item);
+    });
+  },
+
+  _syncMoreSpeakersOverlay() {
+    const zones = this._getHiddenIdleZones();
+    if (zones.length === 0) {
+      this._closeMoreSpeakersOverlay();
+      return;
+    }
+    this._renderMoreSpeakersList();
   },
 
   _renderGroup(group) {
@@ -369,8 +519,9 @@ Module.register('MMM-Sonos', {
 
     const playbackState = (group.playbackState || '').toLowerCase();
     const isPlaying = ['playing', 'transitioning', 'buffering'].includes(playbackState);
-    const isIdleControlCard = this.config.enableControls && !isPlaying && !this.config.showWhenPaused;
-    if (!isPlaying && !this.config.showWhenPaused && !this.config.enableControls) {
+    const controlAlwaysShows = this.config.enableControls && this.config.controlShowIdleZones;
+    const isIdleControlCard = controlAlwaysShows && !isPlaying && !this.config.showWhenPaused;
+    if (!isPlaying && !this.config.showWhenPaused && !controlAlwaysShows) {
       return null;
     }
 

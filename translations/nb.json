@@ -22,5 +22,8 @@
   "CLOSE": "Lukk",
   "NO_FAVORITES": "Ingen favoritter funnet — legg til i Sonos-appen",
   "CONTROL_ERROR": "Fikk ikke kontakt med høyttaler",
-  "ZONE_UNAVAILABLE": "Denne høyttaleren er ikke lenger tilgjengelig"
+  "ZONE_UNAVAILABLE": "Denne høyttaleren er ikke lenger tilgjengelig",
+  "SONOS_CONTROL": "Sonos",
+  "NOW_PLAYING": "Spiller nå",
+  "MORE_SPEAKERS": "Flere høyttalere"
 }

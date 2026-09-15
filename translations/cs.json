@@ -17,5 +17,8 @@
   "SOURCE_LINE_IN": "Linkový vstup",
   "SOURCE_UNKNOWN": "Neznámý",
   "VOLUME": "Hlasitost",
-  "SOURCE_APPLE_MUSIC": "Apple Music"
+  "SOURCE_APPLE_MUSIC": "Apple Music",
+  "SONOS_CONTROL": "Sonos",
+  "NOW_PLAYING": "Právě se přehrává",
+  "MORE_SPEAKERS": "Další reproduktory"
 }

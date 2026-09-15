@@ -17,5 +17,8 @@
   "SOURCE_LINE_IN": "लाइन-इन",
   "SOURCE_UNKNOWN": "अज्ञात",
   "VOLUME": "वॉल्यूम",
-  "SOURCE_APPLE_MUSIC": "Apple Music"
+  "SOURCE_APPLE_MUSIC": "Apple Music",
+  "SONOS_CONTROL": "Sonos",
+  "NOW_PLAYING": "अभी चल रहा है",
+  "MORE_SPEAKERS": "अधिक स्पीकर"
 }

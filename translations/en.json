@@ -22,5 +22,8 @@
   "CLOSE": "Close",
   "NO_FAVORITES": "No favorites found — add some in the Sonos app",
   "CONTROL_ERROR": "Could not reach speaker",
-  "ZONE_UNAVAILABLE": "This speaker is no longer available"
+  "ZONE_UNAVAILABLE": "This speaker is no longer available",
+  "SONOS_CONTROL": "Sonos",
+  "NOW_PLAYING": "Now Playing",
+  "MORE_SPEAKERS": "More speakers"
 }

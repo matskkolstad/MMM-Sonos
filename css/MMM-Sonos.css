@@ -784,3 +784,52 @@
   font-size: 0.9em;
   padding: 0.5rem 0;
 }
+
+.mmm-sonos__more-speakers-btn {
+  position: relative;
+  flex: 0 0 auto;
+  align-self: center;
+  width: 2.4em;
+  height: 2.4em;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  border: none;
+  color: #fff;
+  font-size: 1.3em;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.mmm-sonos__more-speakers-badge {
+  position: absolute;
+  top: -0.3em;
+  right: -0.3em;
+  min-width: 1.4em;
+  height: 1.4em;
+  padding: 0 0.3em;
+  border-radius: 999px;
+  background: #e5484d;
+  color: #fff;
+  font-size: 0.55em;
+  line-height: 1.4em;
+  font-weight: 600;
+}
+
+.mmm-sonos__more-speakers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.mmm-sonos__more-speakers-item {
+  text-align: left;
+  background: rgba(255, 255, 255, 0.06);
+  border: none;
+  color: #fff;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.95em;
+}

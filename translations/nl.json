@@ -17,5 +17,8 @@
   "SOURCE_LINE_IN": "Lijn-ingang",
   "SOURCE_UNKNOWN": "Onbekend",
   "VOLUME": "Volume",
-  "SOURCE_APPLE_MUSIC": "Apple Music"
+  "SOURCE_APPLE_MUSIC": "Apple Music",
+  "SONOS_CONTROL": "Sonos",
+  "NOW_PLAYING": "Nu aan het spelen",
+  "MORE_SPEAKERS": "Meer speakers"
 }
