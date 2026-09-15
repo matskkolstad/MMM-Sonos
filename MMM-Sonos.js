@@ -654,7 +654,7 @@ Module.register('MMM-Sonos', {
     // Progress indicator — show when duration is known and positive.
     // Treat a null position (e.g. track freshly started, RelTime not yet available) as 0.
     if (this.config.showProgress && group.duration != null && group.duration > 0) {
-      const progressElement = this._renderProgress(group.position ?? 0, group.duration, alignment);
+      const progressElement = this._renderProgress(group.position ?? 0, group.duration, alignment, isPlaying);
       if (progressElement) {
         content.appendChild(progressElement);
       }
@@ -1196,7 +1196,7 @@ Module.register('MMM-Sonos', {
     return container;
   },
 
-  _renderProgress(position, duration, alignment) {
+  _renderProgress(position, duration, alignment, isPlaying) {
     if (position == null || duration == null || duration <= 0) {
       return null;
     }
@@ -1226,6 +1226,7 @@ Module.register('MMM-Sonos', {
     bar.dataset.initialPosition = position;
     bar.dataset.duration = duration;
     bar.dataset.timestamp = this.lastUpdated || Date.now();
+    bar.dataset.isPlaying = String(Boolean(isPlaying));
 
     const percentage = Math.min(100, Math.max(0, (position / duration) * 100));
     bar.style.width = `${percentage}%`;
@@ -1238,6 +1239,7 @@ Module.register('MMM-Sonos', {
     timeInfo.dataset.initialPosition = position;
     timeInfo.dataset.duration = duration;
     timeInfo.dataset.timestamp = this.lastUpdated || Date.now();
+    timeInfo.dataset.isPlaying = String(Boolean(isPlaying));
     timeInfo.innerText = `${this._formatTime(position)} / ${this._formatTime(duration)}`;
     container.appendChild(timeInfo);
 
@@ -1365,9 +1367,16 @@ Module.register('MMM-Sonos', {
     const initialPosition = parseFloat(dataset.initialPosition);
     const duration = parseFloat(dataset.duration);
     const timestamp = parseFloat(dataset.timestamp);
+    const isPlaying = dataset.isPlaying === 'true';
 
     if (isNaN(initialPosition) || isNaN(duration) || isNaN(timestamp) || duration <= 0) {
       return null;
+    }
+
+    // While paused/stopped, the position doesn't move — extrapolating it forward
+    // by elapsed wall-clock time would make a paused track appear to keep playing.
+    if (!isPlaying) {
+      return { initialPosition, duration, timestamp, elapsed: 0, currentPosition: initialPosition };
     }
 
     // Calculate elapsed time since the last update
@@ -1826,7 +1835,7 @@ Module.register('MMM-Sonos', {
 
     // Progress bar
     if (this.config.showProgress && group.duration != null && group.duration > 0) {
-      const progressEl = this._renderProgress(group.position ?? 0, group.duration, 'center');
+      const progressEl = this._renderProgress(group.position ?? 0, group.duration, 'center', isPlaying);
       if (progressEl) content.appendChild(progressEl);
     }
 
@@ -1874,6 +1883,7 @@ Module.register('MMM-Sonos', {
 
       // Treat null position (track at 0:00:00) as 0
       const safePosition = group.position ?? 0;
+      const isPlaying = ['playing', 'transitioning', 'buffering'].includes((group.playbackState || '').toLowerCase());
 
       const progressBar = groupElement.querySelector('.mmm-sonos__progress-bar');
       const timeDisplay = groupElement.querySelector('.mmm-sonos__progress-time');
@@ -1882,12 +1892,14 @@ Module.register('MMM-Sonos', {
         progressBar.dataset.initialPosition = safePosition;
         progressBar.dataset.duration = group.duration;
         progressBar.dataset.timestamp = newTimestamp;
+        progressBar.dataset.isPlaying = String(isPlaying);
       }
 
       if (timeDisplay) {
         timeDisplay.dataset.initialPosition = safePosition;
         timeDisplay.dataset.duration = group.duration;
         timeDisplay.dataset.timestamp = newTimestamp;
+        timeDisplay.dataset.isPlaying = String(isPlaying);
       }
     });
   },
