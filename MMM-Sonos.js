@@ -442,15 +442,18 @@ Module.register('MMM-Sonos', {
     }
   },
 
-  _buildMoreSpeakersOverlay() {
-    this._closeMoreSpeakersOverlay();
-
+  // Shared shell for every full-screen overlay in this module: a backdrop (tap outside
+  // to close) wrapping a sheet with a header (title + optional extra header buttons +
+  // close button). Callers append their own body content to the returned `sheet`,
+  // `document.body.append(backdrop)`, and track it in their own `_*OverlayEl` field —
+  // this only builds the shared shell, not the overlay's specific content.
+  _buildOverlayShell(titleText, onClose, extraHeaderButtons = []) {
     const backdrop = document.createElement('div');
     backdrop.className = 'mmm-sonos__overlay-backdrop';
     backdrop.dataset.moduleId = this.identifier;
     backdrop.addEventListener('click', (event) => {
       if (event.target === backdrop) {
-        this._closeMoreSpeakersOverlay();
+        onClose();
       }
     });
 
@@ -461,22 +464,34 @@ Module.register('MMM-Sonos', {
     header.className = 'mmm-sonos__overlay-header';
     const title = document.createElement('span');
     title.className = 'mmm-sonos__overlay-title';
-    title.innerText = this.translate('MORE_SPEAKERS');
+    title.innerText = titleText;
+    header.appendChild(title);
+    extraHeaderButtons.forEach((button) => header.appendChild(button));
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
     closeBtn.className = 'mmm-sonos__overlay-close';
     closeBtn.innerText = '×';
     closeBtn.setAttribute('aria-label', this.translate('CLOSE'));
-    closeBtn.addEventListener('click', () => this._closeMoreSpeakersOverlay());
-    header.appendChild(title);
+    closeBtn.addEventListener('click', () => onClose());
     header.appendChild(closeBtn);
     sheet.appendChild(header);
+
+    backdrop.appendChild(sheet);
+    return { backdrop, sheet };
+  },
+
+  _buildMoreSpeakersOverlay() {
+    this._closeMoreSpeakersOverlay();
+
+    const { backdrop, sheet } = this._buildOverlayShell(
+      this.translate('MORE_SPEAKERS'),
+      () => this._closeMoreSpeakersOverlay()
+    );
 
     const list = document.createElement('div');
     list.className = 'mmm-sonos__more-speakers-list';
     sheet.appendChild(list);
 
-    backdrop.appendChild(sheet);
     document.body.appendChild(backdrop);
     this._moreSpeakersOverlayEl = backdrop;
 
@@ -541,32 +556,10 @@ Module.register('MMM-Sonos', {
     // No action in flight on a freshly-opened picker.
     this._speakersOverlayBusy = false;
 
-    const backdrop = document.createElement('div');
-    backdrop.className = 'mmm-sonos__overlay-backdrop';
-    backdrop.dataset.moduleId = this.identifier;
-    backdrop.addEventListener('click', (event) => {
-      if (event.target === backdrop) {
-        this._closeSpeakersOverlay();
-      }
-    });
-
-    const sheet = document.createElement('div');
-    sheet.className = 'mmm-sonos__overlay-sheet';
-
-    const header = document.createElement('div');
-    header.className = 'mmm-sonos__overlay-header';
-    const title = document.createElement('span');
-    title.className = 'mmm-sonos__overlay-title';
-    title.innerText = this.translate('SPEAKERS');
-    const closeBtn = document.createElement('button');
-    closeBtn.type = 'button';
-    closeBtn.className = 'mmm-sonos__overlay-close';
-    closeBtn.innerText = '×';
-    closeBtn.setAttribute('aria-label', this.translate('CLOSE'));
-    closeBtn.addEventListener('click', () => this._closeSpeakersOverlay());
-    header.appendChild(title);
-    header.appendChild(closeBtn);
-    sheet.appendChild(header);
+    const { backdrop, sheet } = this._buildOverlayShell(
+      this.translate('SPEAKERS'),
+      () => this._closeSpeakersOverlay()
+    );
 
     const currentSection = document.createElement('div');
     currentSection.className = 'mmm-sonos__speakers-current';
@@ -576,7 +569,6 @@ Module.register('MMM-Sonos', {
     joinSection.className = 'mmm-sonos__speakers-join';
     sheet.appendChild(joinSection);
 
-    backdrop.appendChild(sheet);
     document.body.appendChild(backdrop);
     this._speakersOverlayEl = backdrop;
 
@@ -1025,12 +1017,25 @@ Module.register('MMM-Sonos', {
     return ts;
   },
 
+  _limitFavorites(favorites, maxFavorites) {
+    const list = favorites || [];
+    if (!maxFavorites || maxFavorites <= 0) return list;
+    return list.slice(0, maxFavorites);
+  },
+
   _findGroupById(zoneId) {
     return (this.groups || []).find((g) => g.id === zoneId) || null;
   },
 
   // Resolves the zone currently shown in the control overlay, following it across a
   // group/ungroup action that changed its id — see `_activeControlAnchorName` above.
+  //
+  // Deliberate choice: the overlay follows the specific physical speaker whose card was
+  // originally tapped (the anchor), not "the group" as an abstract entity. So if the
+  // anchor speaker itself is the one removed from a group via the Speakers picker, the
+  // overlay correctly follows it into its new standalone zone, rather than staying on
+  // the larger group it just left. This only matters when the anchor happens to also be
+  // the group's coordinator (id lookup below fails only when the coordinator changes).
   _locateActiveGroup() {
     let group = this._findGroupById(this._activeControlZoneId);
     if (!group && this._activeControlAnchorName) {
@@ -1056,6 +1061,14 @@ Module.register('MMM-Sonos', {
   _closeControlOverlay() {
     this._activeControlZoneId = null;
     this._activeControlAnchorName = null;
+    // Cancel any pending debounced volume-set calls — clearing the Map alone drops our
+    // reference to the timer IDs without canceling them, so an in-flight command would
+    // still fire and reach the speaker after the overlay is gone.
+    if (this._controlVolumeDebounceTimer) {
+      clearTimeout(this._controlVolumeDebounceTimer);
+      this._controlVolumeDebounceTimer = null;
+    }
+    this._controlMemberVolumeDebounceTimers.forEach((timer) => clearTimeout(timer));
     this._controlMemberVolumeDebounceTimers.clear();
     this._closeSpeakersOverlay();
     if (this._controlOverlayEl) {
@@ -1098,39 +1111,18 @@ Module.register('MMM-Sonos', {
       return;
     }
 
-    const backdrop = document.createElement('div');
-    backdrop.className = 'mmm-sonos__overlay-backdrop';
-    backdrop.dataset.moduleId = this.identifier;
-    backdrop.addEventListener('click', (event) => {
-      if (event.target === backdrop) {
-        this._closeControlOverlay();
-      }
-    });
-
-    const sheet = document.createElement('div');
-    sheet.className = 'mmm-sonos__overlay-sheet';
-
-    const header = document.createElement('div');
-    header.className = 'mmm-sonos__overlay-header';
-    const title = document.createElement('span');
-    title.className = 'mmm-sonos__overlay-title';
-    title.innerText = group.name || '';
     const speakersBtn = document.createElement('button');
     speakersBtn.type = 'button';
     speakersBtn.className = 'mmm-sonos__overlay-speakers-btn';
     speakersBtn.innerText = this.translate('SPEAKERS');
     speakersBtn.setAttribute('aria-label', this.translate('SPEAKERS'));
     speakersBtn.addEventListener('click', () => this._openSpeakersOverlay());
-    const closeBtn = document.createElement('button');
-    closeBtn.type = 'button';
-    closeBtn.className = 'mmm-sonos__overlay-close';
-    closeBtn.innerText = '×';
-    closeBtn.setAttribute('aria-label', this.translate('CLOSE'));
-    closeBtn.addEventListener('click', () => this._closeControlOverlay());
-    header.appendChild(title);
-    header.appendChild(speakersBtn);
-    header.appendChild(closeBtn);
-    sheet.appendChild(header);
+
+    const { backdrop, sheet } = this._buildOverlayShell(
+      group.name || '',
+      () => this._closeControlOverlay(),
+      [speakersBtn]
+    );
 
     const errorEl = document.createElement('div');
     errorEl.className = 'mmm-sonos__overlay-error';
@@ -1153,7 +1145,10 @@ Module.register('MMM-Sonos', {
       const nowPlaying = !wasPlaying;
       playPauseBtn.innerText = nowPlaying ? '⏸' : '▶';
       playPauseBtn.dataset.isPlaying = String(nowPlaying);
-      this.sendSocketNotification(notification, { zoneId: group.id });
+      // Use the live zone id, not the `group` captured when this button was built —
+      // a group/ungroup action can reassign the zone's id while the overlay stays
+      // open (see _locateActiveGroup), and this handler is never rebuilt, only synced.
+      this.sendSocketNotification(notification, { zoneId: this._activeControlZoneId });
     });
     sheet.appendChild(playPauseBtn);
 
@@ -1171,7 +1166,8 @@ Module.register('MMM-Sonos', {
     volumeLabel.innerText = `${slider.value}%`;
     slider.addEventListener('input', () => {
       volumeLabel.innerText = `${slider.value}%`;
-      this._debounceSetVolume(group.id, Number(slider.value));
+      // See the play/pause handler above — use the live zone id, not `group.id`.
+      this._debounceSetVolume(this._activeControlZoneId, Number(slider.value));
     });
     volumeRow.appendChild(slider);
     volumeRow.appendChild(volumeLabel);
@@ -1186,7 +1182,6 @@ Module.register('MMM-Sonos', {
     favoritesList.className = 'mmm-sonos__overlay-favorites';
     sheet.appendChild(favoritesList);
 
-    backdrop.appendChild(sheet);
     document.body.appendChild(backdrop);
     this._controlOverlayEl = backdrop;
     this._renderedMemberNamesKey = (group.members || []).join('|');
@@ -1332,7 +1327,7 @@ Module.register('MMM-Sonos', {
     list.innerHTML = '';
 
     const group = this._findGroupById(this._activeControlZoneId);
-    const favorites = this.favorites || [];
+    const favorites = this._limitFavorites(this.favorites, this.config.maxFavorites);
 
     // Track what we just rendered so _syncControlOverlay can skip redundant rebuilds
     // (see _renderedFavoritesRef / _renderedActiveTitle).
