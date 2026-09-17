@@ -20,6 +20,10 @@ Module.register('MMM-Sonos', {
     forceHttps: false,
     hideWhenNothingPlaying: true,
     showWhenPaused: false,
+    enableControls: false,
+    favoritesRefreshInterval: 300000,
+    maxFavorites: 12,
+    controlVolumeStep: 5,
     fadePausedGroups: true,
     showGroupMembers: true,
     showPlaybackState: false,
@@ -75,6 +79,10 @@ Module.register('MMM-Sonos', {
     this.progressAnimationTimer = null;
     this._animTransitionTimer = null;
     this._fullUpdateDebounceTimer = null;
+    this.favorites = [];
+    this._activeControlZoneId = null;
+    this._controlOverlayEl = null;
+    this._controlVolumeDebounceTimer = null;
 
   this._log('Starting MMM-Sonos module');
     this.sendSocketNotification('SONOS_CONFIG', this.config);
@@ -83,6 +91,7 @@ Module.register('MMM-Sonos', {
   },
 
   stop() {
+    this._closeControlOverlay();
     if (this.updateTimer) {
       clearInterval(this.updateTimer);
       this.updateTimer = null;
@@ -127,6 +136,10 @@ Module.register('MMM-Sonos', {
         this.lastUpdated = newTimestamp;
         this.error = null;
 
+        if (this.config.enableControls && this._activeControlZoneId) {
+          this._syncControlOverlay();
+        }
+
         if (needsFull) {
           this._log('Structural change — full DOM update');
           this._animatedUpdateDom();
@@ -166,6 +179,17 @@ Module.register('MMM-Sonos', {
 
       case 'SONOS_CACHE_CLEARED':
         this._log('Album art cache cleared', payload);
+        break;
+
+      case 'SONOS_CONTROL_RESULT':
+        this._handleControlResult(payload);
+        break;
+
+      case 'SONOS_FAVORITES':
+        this.favorites = payload?.favorites || [];
+        if (this._activeControlZoneId) {
+          this._renderControlOverlayFavorites();
+        }
         break;
     }
   },
@@ -336,7 +360,8 @@ Module.register('MMM-Sonos', {
 
     const playbackState = (group.playbackState || '').toLowerCase();
     const isPlaying = ['playing', 'transitioning', 'buffering'].includes(playbackState);
-    if (!isPlaying && !this.config.showWhenPaused) {
+    const isIdleControlCard = this.config.enableControls && !isPlaying && !this.config.showWhenPaused;
+    if (!isPlaying && !this.config.showWhenPaused && !this.config.enableControls) {
       return null;
     }
 
@@ -347,6 +372,9 @@ Module.register('MMM-Sonos', {
 
     const container = document.createElement('div');
     container.className = 'mmm-sonos__group';
+    if (isIdleControlCard) {
+      container.classList.add('mmm-sonos__group--idle');
+    }
     container.dataset.groupId = group.id;
     container.style.display = 'flex';
     container.style.gap = '0.45rem';
@@ -407,7 +435,7 @@ Module.register('MMM-Sonos', {
     const configuredSize = Number(this.config.albumArtSize);
     const sizeValue = !Number.isNaN(configuredSize) && configuredSize > 0 ? `${configuredSize}px` : null;
     const iconFontSize = !Number.isNaN(configuredSize) && configuredSize > 0 ? `${Math.round(configuredSize * 0.42)}px` : null;
-    if (group.albumArt) {
+    if (group.albumArt && !isIdleControlCard) {
       const artWrapper = document.createElement('div');
       artWrapper.className = 'mmm-sonos__art';
       if (sizeValue) {
@@ -486,6 +514,18 @@ Module.register('MMM-Sonos', {
       }
 
       container.appendChild(artWrapper);
+    } else if (isIdleControlCard) {
+      const idleWrapper = document.createElement('div');
+      idleWrapper.className = 'mmm-sonos__art mmm-sonos__idle-icon';
+      if (sizeValue) {
+        idleWrapper.style.width = sizeValue;
+        idleWrapper.style.height = sizeValue;
+      }
+      idleWrapper.innerText = '🔇';
+      if (iconFontSize) {
+        idleWrapper.style.fontSize = iconFontSize;
+      }
+      container.appendChild(idleWrapper);
     }
 
     const content = document.createElement('div');
@@ -543,7 +583,7 @@ Module.register('MMM-Sonos', {
       content.appendChild(sourceElement);
     }
 
-    const hasTrackInfo = group.title || group.artist;
+    const hasTrackInfo = !isIdleControlCard && (group.title || group.artist);
     const titleIsDuplicateTv = isTvSource && (!group.artist) && typeof group.title === 'string' && group.title.trim().toLowerCase() === 'tv';
 
     if (hasTrackInfo && !titleIsDuplicateTv) {
@@ -587,10 +627,15 @@ Module.register('MMM-Sonos', {
       }
 
       content.appendChild(titleWrapper);
+    } else if (isIdleControlCard) {
+      const idleLabel = document.createElement('div');
+      idleLabel.className = 'mmm-sonos__idle-label';
+      idleLabel.innerText = this.translate('IDLE_LABEL');
+      content.appendChild(idleLabel);
     }
 
     // Playback source indicator
-    if (this.config.showPlaybackSource && group.source && !isTvSource) {
+    if (this.config.showPlaybackSource && group.source && !isTvSource && !isIdleControlCard) {
       const sourceElement = this._renderPlaybackSource(group.source, alignment);
       if (sourceElement) {
         content.appendChild(sourceElement);
@@ -621,6 +666,19 @@ Module.register('MMM-Sonos', {
       content.appendChild(members);
     }
 
+    if (this.config.enableControls) {
+      container.classList.add('mmm-sonos__group--clickable');
+      container.setAttribute('role', 'button');
+      container.setAttribute('tabindex', '0');
+      container.addEventListener('click', () => this._openControlOverlay(group.id));
+      container.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          this._openControlOverlay(group.id);
+        }
+      });
+    }
+
     container.appendChild(content);
     return container;
   },
@@ -638,6 +696,228 @@ Module.register('MMM-Sonos', {
     }
     ts.innerText = `${this.translate('UPDATED')} ${date.toLocaleTimeString(this.config.dateLocale, options)}`;
     return ts;
+  },
+
+  _findGroupById(zoneId) {
+    return (this.groups || []).find((g) => g.id === zoneId) || null;
+  },
+
+  _openControlOverlay(zoneId) {
+    if (!this.config.enableControls) {
+      return;
+    }
+    this._activeControlZoneId = zoneId;
+    this._buildControlOverlay();
+  },
+
+  _closeControlOverlay() {
+    this._activeControlZoneId = null;
+    if (this._controlOverlayEl) {
+      this._controlOverlayEl.remove();
+      this._controlOverlayEl = null;
+    }
+  },
+
+  _debounceSetVolume(zoneId, volume) {
+    if (this._controlVolumeDebounceTimer) {
+      clearTimeout(this._controlVolumeDebounceTimer);
+    }
+    this._controlVolumeDebounceTimer = setTimeout(() => {
+      this._controlVolumeDebounceTimer = null;
+      this.sendSocketNotification('SONOS_CONTROL_SET_VOLUME', { zoneId, volume });
+    }, 150);
+  },
+
+  _buildControlOverlay() {
+    if (this._controlOverlayEl) {
+      this._controlOverlayEl.remove();
+      this._controlOverlayEl = null;
+    }
+
+    const group = this._findGroupById(this._activeControlZoneId);
+    if (!group) {
+      this._activeControlZoneId = null;
+      return;
+    }
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'mmm-sonos__overlay-backdrop';
+    backdrop.dataset.moduleId = this.identifier;
+    backdrop.addEventListener('click', (event) => {
+      if (event.target === backdrop) {
+        this._closeControlOverlay();
+      }
+    });
+
+    const sheet = document.createElement('div');
+    sheet.className = 'mmm-sonos__overlay-sheet';
+
+    const header = document.createElement('div');
+    header.className = 'mmm-sonos__overlay-header';
+    const title = document.createElement('span');
+    title.className = 'mmm-sonos__overlay-title';
+    title.innerText = group.name || '';
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'mmm-sonos__overlay-close';
+    closeBtn.innerText = '×';
+    closeBtn.setAttribute('aria-label', this.translate('CLOSE'));
+    closeBtn.addEventListener('click', () => this._closeControlOverlay());
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+    sheet.appendChild(header);
+
+    const errorEl = document.createElement('div');
+    errorEl.className = 'mmm-sonos__overlay-error';
+    errorEl.hidden = true;
+    sheet.appendChild(errorEl);
+
+    const isPlaying = ['playing', 'transitioning', 'buffering'].includes((group.playbackState || '').toLowerCase());
+    const playPauseBtn = document.createElement('button');
+    playPauseBtn.type = 'button';
+    playPauseBtn.className = 'mmm-sonos__overlay-playpause';
+    playPauseBtn.innerText = isPlaying ? '⏸' : '▶';
+    playPauseBtn.dataset.isPlaying = String(isPlaying);
+    playPauseBtn.addEventListener('click', () => {
+      const notification = playPauseBtn.dataset.isPlaying === 'true' ? 'SONOS_CONTROL_PAUSE' : 'SONOS_CONTROL_PLAY';
+      this.sendSocketNotification(notification, { zoneId: group.id });
+    });
+    sheet.appendChild(playPauseBtn);
+
+    const volumeRow = document.createElement('div');
+    volumeRow.className = 'mmm-sonos__overlay-volume';
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0';
+    slider.max = '100';
+    slider.step = String(this.config.controlVolumeStep || 5);
+    slider.value = String(group.volume ?? 0);
+    slider.className = 'mmm-sonos__overlay-volume-slider';
+    const volumeLabel = document.createElement('span');
+    volumeLabel.className = 'mmm-sonos__overlay-volume-label';
+    volumeLabel.innerText = `${slider.value}%`;
+    slider.addEventListener('input', () => {
+      volumeLabel.innerText = `${slider.value}%`;
+      this._debounceSetVolume(group.id, Number(slider.value));
+    });
+    volumeRow.appendChild(slider);
+    volumeRow.appendChild(volumeLabel);
+    sheet.appendChild(volumeRow);
+
+    const favoritesList = document.createElement('div');
+    favoritesList.className = 'mmm-sonos__overlay-favorites';
+    sheet.appendChild(favoritesList);
+
+    backdrop.appendChild(sheet);
+    document.body.appendChild(backdrop);
+    this._controlOverlayEl = backdrop;
+    this._renderControlOverlayFavorites();
+  },
+
+  _syncControlOverlay() {
+    const group = this._findGroupById(this._activeControlZoneId);
+    if (!group) {
+      this._showZoneUnavailableAndClose();
+      return;
+    }
+    if (!this._controlOverlayEl) {
+      return;
+    }
+
+    const title = this._controlOverlayEl.querySelector('.mmm-sonos__overlay-title');
+    if (title) {
+      title.innerText = group.name || '';
+    }
+
+    const playPauseBtn = this._controlOverlayEl.querySelector('.mmm-sonos__overlay-playpause');
+    if (playPauseBtn) {
+      const isPlaying = ['playing', 'transitioning', 'buffering'].includes((group.playbackState || '').toLowerCase());
+      playPauseBtn.innerText = isPlaying ? '⏸' : '▶';
+      playPauseBtn.dataset.isPlaying = String(isPlaying);
+    }
+
+    const slider = this._controlOverlayEl.querySelector('.mmm-sonos__overlay-volume-slider');
+    const volumeLabel = this._controlOverlayEl.querySelector('.mmm-sonos__overlay-volume-label');
+    if (slider && document.activeElement !== slider && group.volume != null) {
+      slider.value = String(group.volume);
+      if (volumeLabel) {
+        volumeLabel.innerText = `${group.volume}%`;
+      }
+    }
+
+    this._renderControlOverlayFavorites();
+  },
+
+  _renderControlOverlayFavorites() {
+    if (!this._controlOverlayEl) {
+      return;
+    }
+    const list = this._controlOverlayEl.querySelector('.mmm-sonos__overlay-favorites');
+    if (!list) {
+      return;
+    }
+    list.innerHTML = '';
+
+    const group = this._findGroupById(this._activeControlZoneId);
+    const maxFavorites = this.config.maxFavorites || 12;
+    const favorites = (this.favorites || []).slice(0, maxFavorites);
+
+    if (!favorites.length) {
+      const empty = document.createElement('div');
+      empty.className = 'mmm-sonos__overlay-favorites-empty';
+      empty.innerText = this.translate('NO_FAVORITES');
+      list.appendChild(empty);
+      return;
+    }
+
+    favorites.forEach((favorite) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'mmm-sonos__overlay-favorite';
+      const isActive = !!(group && group.title && group.title === favorite.title);
+      if (isActive) {
+        item.classList.add('mmm-sonos__overlay-favorite--active');
+      }
+      item.innerText = favorite.title;
+      item.addEventListener('click', () => {
+        this.sendSocketNotification('SONOS_CONTROL_PLAY_FAVORITE', {
+          zoneId: this._activeControlZoneId,
+          favoriteId: favorite.id
+        });
+      });
+      list.appendChild(item);
+    });
+  },
+
+  _showZoneUnavailableAndClose() {
+    if (!this._controlOverlayEl) {
+      this._activeControlZoneId = null;
+      return;
+    }
+    const errorEl = this._controlOverlayEl.querySelector('.mmm-sonos__overlay-error');
+    if (errorEl) {
+      errorEl.hidden = false;
+      errorEl.innerText = this.translate('ZONE_UNAVAILABLE');
+    }
+    setTimeout(() => this._closeControlOverlay(), 1500);
+  },
+
+  _handleControlResult(payload) {
+    if (!this._controlOverlayEl || !payload || payload.zoneId !== this._activeControlZoneId) {
+      return;
+    }
+    const errorEl = this._controlOverlayEl.querySelector('.mmm-sonos__overlay-error');
+    if (!errorEl) {
+      return;
+    }
+    if (payload.success) {
+      errorEl.hidden = true;
+      errorEl.innerText = '';
+    } else {
+      errorEl.hidden = false;
+      const group = this._findGroupById(this._activeControlZoneId);
+      errorEl.innerText = `${this.translate('CONTROL_ERROR')}${group?.name ? ': ' + group.name : ''}`;
+    }
   },
 
   _resolveDisplayMode() {

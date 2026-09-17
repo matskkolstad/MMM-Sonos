@@ -212,6 +212,18 @@ function _resolveFullscreenGroup(groups, fullscreenSpeaker) {
   return groups[0];
 }
 
+// Pure copy of the new `_resolveMemberHost()` helper from node_helper.js, for unit testing.
+function _resolveMemberHost(member) {
+  const location = member && (member.Location || member.location);
+  if (!location) return null;
+  try {
+    const url = new URL(location);
+    return { host: url.hostname, port: url.port ? parseInt(url.port, 10) : 1400 };
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -854,6 +866,55 @@ describe('_isHidden() – whitelist/blacklist filtering', () => {
   });
 });
 
+// Pure copy of the zone-inclusion logic from node_helper.js `_mapGroups()`,
+// extracted for unit testing (mirrors the `_isHidden` pattern above).
+function _shouldIncludeZone(state, isTvSource, config) {
+  const allowWhenPaused = config.showWhenPaused || isTvSource || config.enableControls;
+  if (state !== 'playing' && !allowWhenPaused) {
+    return false;
+  }
+  if (state === 'stopped' && config.hideWhenNothingPlaying && !isTvSource && !config.enableControls) {
+    return false;
+  }
+  return true;
+}
+
+describe('_shouldIncludeZone()', () => {
+  const defaultConfig = { showWhenPaused: false, hideWhenNothingPlaying: true, enableControls: false };
+
+  it('excludes a stopped zone by default (regression: current behavior)', () => {
+    assert.equal(_shouldIncludeZone('stopped', false, defaultConfig), false);
+  });
+
+  it('excludes a paused zone by default (regression: current behavior)', () => {
+    assert.equal(_shouldIncludeZone('paused', false, defaultConfig), false);
+  });
+
+  it('includes a playing zone by default (regression: current behavior)', () => {
+    assert.equal(_shouldIncludeZone('playing', false, defaultConfig), true);
+  });
+
+  it('includes a paused zone when showWhenPaused is set (regression: current behavior)', () => {
+    assert.equal(_shouldIncludeZone('paused', false, { ...defaultConfig, showWhenPaused: true }), true);
+  });
+
+  it('always includes a TV source zone (regression: current behavior)', () => {
+    assert.equal(_shouldIncludeZone('stopped', true, defaultConfig), true);
+  });
+
+  it('includes a stopped zone when enableControls is true', () => {
+    assert.equal(_shouldIncludeZone('stopped', false, { ...defaultConfig, enableControls: true }), true);
+  });
+
+  it('includes a paused zone when enableControls is true', () => {
+    assert.equal(_shouldIncludeZone('paused', false, { ...defaultConfig, enableControls: true }), true);
+  });
+
+  it('includes a playing zone when enableControls is true', () => {
+    assert.equal(_shouldIncludeZone('playing', false, { ...defaultConfig, enableControls: true }), true);
+  });
+});
+
 describe('_resolveDisplayMode()', () => {
   it('returns "fullscreen" when configured', () => {
     assert.equal(_resolveDisplayMode('fullscreen', 3, 2), 'fullscreen');
@@ -925,5 +986,93 @@ describe('_resolveFullscreenGroup()', () => {
 
   it('returns null when groups is null', () => {
     assert.equal(_resolveFullscreenGroup(null, null), null);
+  });
+});
+
+describe('_resolveMemberHost()', () => {
+  it('parses host and port from a Location URL', () => {
+    const result = _resolveMemberHost({ Location: 'http://192.168.1.50:1400/xml/device_description.xml' });
+    assert.deepEqual(result, { host: '192.168.1.50', port: 1400 });
+  });
+
+  it('defaults to port 1400 when the URL has no explicit port', () => {
+    const result = _resolveMemberHost({ Location: 'http://192.168.1.50/xml/device_description.xml' });
+    assert.deepEqual(result, { host: '192.168.1.50', port: 1400 });
+  });
+
+  it('returns null when there is no Location field', () => {
+    assert.equal(_resolveMemberHost({ ZoneName: 'Kitchen' }), null);
+  });
+
+  it('returns null for a malformed Location URL', () => {
+    assert.equal(_resolveMemberHost({ Location: 'not-a-url' }), null);
+  });
+
+  it('accepts a lowercase location field', () => {
+    const result = _resolveMemberHost({ location: 'http://10.0.0.17:1400/xml/device_description.xml' });
+    assert.deepEqual(result, { host: '10.0.0.17', port: 1400 });
+  });
+});
+
+// Pure copy of the favorites-mapping logic from node_helper.js `_refreshFavorites()`.
+function _mapFavorites(items) {
+  return (items || [])
+    .map((item, index) => ({
+      id: item.id || `favorite-${index}`,
+      title: item.title || 'Untitled',
+      uri: item.uri
+    }))
+    .filter((f) => !!f.uri);
+}
+
+describe('_mapFavorites()', () => {
+  it('maps title/uri/id fields', () => {
+    const result = _mapFavorites([{ id: 'FV:2/0', title: 'NRK P3', uri: 'x-sonosapi-hls:p3' }]);
+    assert.deepEqual(result, [{ id: 'FV:2/0', title: 'NRK P3', uri: 'x-sonosapi-hls:p3' }]);
+  });
+
+  it('drops favorites with no uri', () => {
+    const result = _mapFavorites([{ id: 'a', title: 'Broken favorite' }]);
+    assert.deepEqual(result, []);
+  });
+
+  it('falls back to an index-based id when missing', () => {
+    const result = _mapFavorites([{ title: 'NRK P1', uri: 'x-sonosapi-hls:p1' }]);
+    assert.equal(result[0].id, 'favorite-0');
+  });
+
+  it('falls back to "Untitled" when title is missing', () => {
+    const result = _mapFavorites([{ uri: 'x-sonosapi-hls:p1' }]);
+    assert.equal(result[0].title, 'Untitled');
+  });
+
+  it('returns an empty array for empty/undefined input', () => {
+    assert.deepEqual(_mapFavorites([]), []);
+    assert.deepEqual(_mapFavorites(undefined), []);
+  });
+});
+
+// Pure copy of the `_findZone()` lookup helper from node_helper.js.
+function _findZone(lastPayload, zoneId) {
+  return (lastPayload || []).find((z) => z.id === zoneId) || null;
+}
+
+describe('_findZone()', () => {
+  const payload = [
+    { id: 'zone-1', name: 'Kitchen' },
+    { id: 'zone-2', name: 'Bedroom' }
+  ];
+
+  it('finds a zone by id', () => {
+    assert.deepEqual(_findZone(payload, 'zone-2'), { id: 'zone-2', name: 'Bedroom' });
+  });
+
+  it('returns null when the zone id is not found', () => {
+    assert.equal(_findZone(payload, 'zone-99'), null);
+  });
+
+  it('returns null for an empty payload', () => {
+    assert.equal(_findZone([], 'zone-1'), null);
+    assert.equal(_findZone(undefined, 'zone-1'), null);
   });
 });

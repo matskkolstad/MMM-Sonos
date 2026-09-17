@@ -21,6 +21,8 @@ module.exports = NodeHelper.create({
     this.updateTimer = null;
     this.isDiscovering = false;
     this.lastPayload = [];
+    this.favorites = [];
+    this.favoritesTimer = null;
     this.albumArtCache = new Map(); // in-memory cache: url-hash → local filename
     this.accentColorCache = new Map(); // in-memory cache: filename → { r, g, b } | null
 
@@ -34,6 +36,10 @@ module.exports = NodeHelper.create({
 
   async stop() {
     this._clearTimer();
+    if (this.favoritesTimer) {
+      clearInterval(this.favoritesTimer);
+      this.favoritesTimer = null;
+    }
   },
 
   socketNotificationReceived(notification, payload) {
@@ -47,6 +53,18 @@ module.exports = NodeHelper.create({
       case 'SONOS_CLEAR_CACHE':
         this._clearAlbumArtCache();
         this.sendSocketNotification('SONOS_CACHE_CLEARED', { timestamp: Date.now() });
+        break;
+      case 'SONOS_CONTROL_PLAY':
+        this._handlePlay(payload?.zoneId);
+        break;
+      case 'SONOS_CONTROL_PAUSE':
+        this._handlePause(payload?.zoneId);
+        break;
+      case 'SONOS_CONTROL_SET_VOLUME':
+        this._handleSetVolume(payload?.zoneId, payload?.volume);
+        break;
+      case 'SONOS_CONTROL_PLAY_FAVORITE':
+        this._handlePlayFavorite(payload?.zoneId, payload?.favoriteId);
         break;
     }
   },
@@ -63,6 +81,8 @@ module.exports = NodeHelper.create({
         maxGroups: 6,
         showWhenPaused: false,
         hideWhenNothingPlaying: true,
+        enableControls: false,
+        favoritesRefreshInterval: 300000,
         forceHttps: false,
         showTvSource: true,
         showTvIcon: true,
@@ -114,6 +134,19 @@ module.exports = NodeHelper.create({
 
     if (!this.updateTimer) {
       this.updateTimer = setInterval(() => this._refresh(), Math.max(this.config.updateInterval, 5000));
+    }
+
+    if (this.config.enableControls) {
+      this._refreshFavorites();
+      if (!this.favoritesTimer) {
+        this.favoritesTimer = setInterval(
+          () => this._refreshFavorites(),
+          Math.max(this.config.favoritesRefreshInterval || 300000, 60000)
+        );
+      }
+    } else if (this.favoritesTimer) {
+      clearInterval(this.favoritesTimer);
+      this.favoritesTimer = null;
     }
 
     // Only call _refresh() here when the coordinator was NOT already known above.
@@ -230,6 +263,93 @@ module.exports = NodeHelper.create({
     }
   },
 
+  async _refreshFavorites() {
+    if (!this.coordinator) {
+      return;
+    }
+    try {
+      const result = await this.coordinator.getFavorites();
+      this.favorites = (result?.items || [])
+        .map((item, index) => ({
+          id: item.id || `favorite-${index}`,
+          title: item.title || 'Untitled',
+          uri: item.uri
+        }))
+        .filter((f) => !!f.uri);
+      this.sendSocketNotification('SONOS_FAVORITES', { favorites: this.favorites, timestamp: Date.now() });
+    } catch (error) {
+      this.sendDebug('Failed to fetch favorites', error?.message || error);
+    }
+  },
+
+  async _handlePlay(zoneId) {
+    const zone = this._findZone(zoneId);
+    if (!zone || !zone.coordinatorHost) {
+      this._sendControlResult(zoneId, 'play', false, 'Zone not found');
+      return;
+    }
+    try {
+      await new Sonos(zone.coordinatorHost).play();
+      this._sendControlResult(zoneId, 'play', true);
+    } catch (error) {
+      this._sendControlResult(zoneId, 'play', false, error?.message || String(error));
+    }
+  },
+
+  async _handlePause(zoneId) {
+    const zone = this._findZone(zoneId);
+    if (!zone || !zone.coordinatorHost) {
+      this._sendControlResult(zoneId, 'pause', false, 'Zone not found');
+      return;
+    }
+    try {
+      await new Sonos(zone.coordinatorHost).pause();
+      this._sendControlResult(zoneId, 'pause', true);
+    } catch (error) {
+      this._sendControlResult(zoneId, 'pause', false, error?.message || String(error));
+    }
+  },
+
+  async _handleSetVolume(zoneId, volume) {
+    const zone = this._findZone(zoneId);
+    if (!zone) {
+      this._sendControlResult(zoneId, 'setVolume', false, 'Zone not found');
+      return;
+    }
+    const targets = (zone.memberHosts && zone.memberHosts.length)
+      ? zone.memberHosts
+      : (zone.coordinatorHost ? [{ host: zone.coordinatorHost, port: 1400 }] : []);
+    if (!targets.length) {
+      this._sendControlResult(zoneId, 'setVolume', false, 'No reachable speakers in zone');
+      return;
+    }
+    try {
+      await Promise.all(targets.map((target) => new Sonos(target.host, target.port).setVolume(volume)));
+      this._sendControlResult(zoneId, 'setVolume', true);
+    } catch (error) {
+      this._sendControlResult(zoneId, 'setVolume', false, error?.message || String(error));
+    }
+  },
+
+  async _handlePlayFavorite(zoneId, favoriteId) {
+    const zone = this._findZone(zoneId);
+    if (!zone || !zone.coordinatorHost) {
+      this._sendControlResult(zoneId, 'playFavorite', false, 'Zone not found');
+      return;
+    }
+    const favorite = (this.favorites || []).find((f) => f.id === favoriteId);
+    if (!favorite) {
+      this._sendControlResult(zoneId, 'playFavorite', false, 'Favorite not found');
+      return;
+    }
+    try {
+      await new Sonos(zone.coordinatorHost).setAVTransportURI(favorite.uri);
+      this._sendControlResult(zoneId, 'playFavorite', true);
+    } catch (error) {
+      this._sendControlResult(zoneId, 'playFavorite', false, error?.message || String(error));
+    }
+  },
+
   async _mapGroups(groups) {
     if (!Array.isArray(groups)) {
       return [];
@@ -259,6 +379,7 @@ module.exports = NodeHelper.create({
         ? Object.values(membersRaw)
         : [];
       const members = [];
+      const memberHosts = [];
       let skipGroup = false;
 
       if (hiddenGroups.has((id || '').toLowerCase()) || hiddenGroups.has((name || '').toLowerCase())) {
@@ -277,6 +398,10 @@ module.exports = NodeHelper.create({
           break;
         }
         members.push(displayName);
+        const memberHost = this._resolveMemberHost(member);
+        if (memberHost) {
+          memberHosts.push(memberHost);
+        }
       }
 
       if (skipGroup) {
@@ -296,7 +421,7 @@ module.exports = NodeHelper.create({
         const source = this._detectSource(track);
         const isTvSource = source === 'tv';
 
-        const allowWhenPaused = this.config.showWhenPaused || isTvSource;
+        const allowWhenPaused = this.config.showWhenPaused || isTvSource || this.config.enableControls;
         if (state !== 'playing' && !allowWhenPaused) {
           this.sendDebug('Skipping group because it is not playing (and not allowed when paused)', name || id, state, {
             isTvSource
@@ -304,7 +429,7 @@ module.exports = NodeHelper.create({
           continue;
         }
 
-        if (state === 'stopped' && this.config.hideWhenNothingPlaying && !isTvSource) {
+        if (state === 'stopped' && this.config.hideWhenNothingPlaying && !isTvSource && !this.config.enableControls) {
           this.sendDebug('Hiding stopped group because hideWhenNothingPlaying is enabled', name || id);
           continue;
         }
@@ -447,6 +572,7 @@ module.exports = NodeHelper.create({
           id: id || coordinator.uuid || coordinator.host,
           name: name || coordinatorName || 'Sonos',
           coordinatorHost: coordinator.host || null,
+          memberHosts: memberHosts.length ? memberHosts : (coordinator.host ? [{ host: coordinator.host, port: coordinator.port || 1400 }] : []),
           playbackState: state,
           title: displayTitle,
           artist: displayArtist,
@@ -468,6 +594,14 @@ module.exports = NodeHelper.create({
     }
   const ordered = formatted.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     return ordered.slice(0, this.config.maxGroups || ordered.length);
+  },
+
+  _findZone(zoneId) {
+    return (this.lastPayload || []).find((z) => z.id === zoneId) || null;
+  },
+
+  _sendControlResult(zoneId, action, success, error) {
+    this.sendSocketNotification('SONOS_CONTROL_RESULT', { zoneId, action, success, error: error || null });
   },
 
   _resolveCoordinator(group) {
@@ -497,6 +631,20 @@ module.exports = NodeHelper.create({
     }
 
     return null;
+  },
+
+  _resolveMemberHost(member) {
+    const location = this._pick(member, ['Location', 'location']);
+    if (!location) {
+      return null;
+    }
+    try {
+      const url = new URL(location);
+      return { host: url.hostname, port: url.port ? parseInt(url.port, 10) : 1400 };
+    } catch (error) {
+      this.sendDebug('Failed to parse member location', location, error?.message || error);
+      return null;
+    }
   },
 
   async _inferCoordinatorName(coordinator) {
