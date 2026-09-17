@@ -96,6 +96,11 @@ Module.register('MMM-Sonos', {
     this._renderedFavoritesRef = null;
     this._renderedActiveTitle = null;
     this._renderedMemberNamesKey = null;
+    // Which favorite was last tapped and is awaiting confirmation, so its row can show
+    // a "pending" state immediately instead of sitting inert until the next SONOS_DATA
+    // tick (which used to take up to a full updateInterval — see _setFavoritePending).
+    this._pendingFavoriteId = null;
+    this._pendingFavoriteTimer = null;
 
   this._log('Starting MMM-Sonos module');
     this.sendSocketNotification('SONOS_CONFIG', this.config);
@@ -1023,6 +1028,48 @@ Module.register('MMM-Sonos', {
     return list.slice(0, maxFavorites);
   },
 
+  // Decides whether a favorites-list row renders as active, pending (tapped, awaiting
+  // confirmation), or idle. "Active" always wins over "pending" once the group title
+  // actually catches up, so the pulsing state clears itself the moment it's confirmed.
+  _resolveFavoriteState(favorite, groupTitle, pendingFavoriteId) {
+    if (groupTitle && favorite.title === groupTitle) return 'active';
+    if (favorite.id === pendingFavoriteId) return 'pending';
+    return 'idle';
+  },
+
+  _setFavoritePending(favoriteId) {
+    if (this._pendingFavoriteTimer) {
+      clearTimeout(this._pendingFavoriteTimer);
+    }
+    this._pendingFavoriteId = favoriteId;
+    if (this._controlOverlayEl) {
+      const item = this._controlOverlayEl.querySelector(
+        `.mmm-sonos__overlay-favorite[data-favorite-id="${CSS.escape(favoriteId)}"]`
+      );
+      if (item) {
+        item.classList.add('mmm-sonos__overlay-favorite--pending');
+      }
+    }
+    // Safety net: never leave a favorite stuck "pending" if the title match never
+    // fires (e.g. a radio favorite whose saved title doesn't exactly match the
+    // display title derived for it elsewhere) or a result/refresh never arrives.
+    this._pendingFavoriteTimer = setTimeout(() => this._clearFavoritePending(), 5000);
+  },
+
+  _clearFavoritePending({ rerender = true } = {}) {
+    if (this._pendingFavoriteTimer) {
+      clearTimeout(this._pendingFavoriteTimer);
+      this._pendingFavoriteTimer = null;
+    }
+    if (this._pendingFavoriteId === null) {
+      return;
+    }
+    this._pendingFavoriteId = null;
+    if (rerender) {
+      this._renderControlOverlayFavorites();
+    }
+  },
+
   _findGroupById(zoneId) {
     return (this.groups || []).find((g) => g.id === zoneId) || null;
   },
@@ -1070,6 +1117,7 @@ Module.register('MMM-Sonos', {
     }
     this._controlMemberVolumeDebounceTimers.forEach((timer) => clearTimeout(timer));
     this._controlMemberVolumeDebounceTimers.clear();
+    this._clearFavoritePending({ rerender: false });
     this._closeSpeakersOverlay();
     if (this._controlOverlayEl) {
       this._controlOverlayEl.remove();
@@ -1346,12 +1394,21 @@ Module.register('MMM-Sonos', {
       const item = document.createElement('button');
       item.type = 'button';
       item.className = 'mmm-sonos__overlay-favorite';
-      const isActive = !!(group && group.title && group.title === favorite.title);
-      if (isActive) {
+      item.dataset.favoriteId = favorite.id;
+      const state = this._resolveFavoriteState(favorite, group?.title || null, this._pendingFavoriteId);
+      if (state === 'active') {
         item.classList.add('mmm-sonos__overlay-favorite--active');
+        // The pending favorite just got confirmed — stop the pulse and drop the
+        // safety-net timer now instead of waiting for it to expire on its own.
+        if (favorite.id === this._pendingFavoriteId) {
+          this._clearFavoritePending({ rerender: false });
+        }
+      } else if (state === 'pending') {
+        item.classList.add('mmm-sonos__overlay-favorite--pending');
       }
       item.innerText = favorite.title;
       item.addEventListener('click', () => {
+        this._setFavoritePending(favorite.id);
         this.sendSocketNotification('SONOS_CONTROL_PLAY_FAVORITE', {
           zoneId: this._activeControlZoneId,
           favoriteId: favorite.id
@@ -1377,6 +1434,9 @@ Module.register('MMM-Sonos', {
   _handleControlResult(payload) {
     if (!this._controlOverlayEl || !payload || payload.zoneId !== this._activeControlZoneId) {
       return;
+    }
+    if (payload.action === 'playFavorite' && !payload.success) {
+      this._clearFavoritePending();
     }
     const errorEl = this._controlOverlayEl.querySelector('.mmm-sonos__overlay-error');
     if (!errorEl) {

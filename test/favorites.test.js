@@ -54,3 +54,39 @@ describe('_limitFavorites', () => {
     assert.deepEqual(_limitFavorites(undefined, 12), []);
   });
 });
+
+// Pure copy of the new `_resolveFavoriteState()` helper from MMM-Sonos.js — decides
+// whether a favorites-list row should render as active, pending (tapped, awaiting
+// confirmation), or idle.
+function _resolveFavoriteState(favorite, groupTitle, pendingFavoriteId) {
+  if (groupTitle && favorite.title === groupTitle) return 'active';
+  if (favorite.id === pendingFavoriteId) return 'pending';
+  return 'idle';
+}
+
+describe('_resolveFavoriteState', () => {
+  const favorite = { id: 'fav-1', title: 'Morning Jazz' };
+
+  it('returns "active" when the group is currently playing this favorite', () => {
+    assert.equal(_resolveFavoriteState(favorite, 'Morning Jazz', null), 'active');
+  });
+
+  it('returns "pending" when this favorite was just tapped and is not yet confirmed active', () => {
+    assert.equal(_resolveFavoriteState(favorite, 'Something Else', 'fav-1'), 'pending');
+  });
+
+  it('prefers "active" over "pending" once the group title actually matches', () => {
+    // Simulates the tick where confirmation lands: the tapped favorite is still
+    // recorded as pending, but the group title now matches it too.
+    assert.equal(_resolveFavoriteState(favorite, 'Morning Jazz', 'fav-1'), 'active');
+  });
+
+  it('returns "idle" when neither active nor pending', () => {
+    assert.equal(_resolveFavoriteState(favorite, 'Something Else', null), 'idle');
+    assert.equal(_resolveFavoriteState(favorite, 'Something Else', 'fav-2'), 'idle');
+  });
+
+  it('returns "idle" when there is no current group title', () => {
+    assert.equal(_resolveFavoriteState(favorite, null, null), 'idle');
+  });
+});

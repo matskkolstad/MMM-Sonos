@@ -415,6 +415,9 @@ module.exports = NodeHelper.create({
     try {
       await new Sonos(zone.coordinatorHost).setAVTransportURI(favorite.uri);
       this._sendControlResult(zoneId, 'playFavorite', true);
+      // Without this, the overlay only learns the new track on the next regular poll
+      // tick (up to `updateInterval`, e.g. 15s) — same pattern as join/leave.
+      this._refresh();
     } catch (error) {
       this._sendControlResult(zoneId, 'playFavorite', false, error?.message || String(error));
     }

@@ -780,6 +780,15 @@
   font-weight: 600;
 }
 
+.mmm-sonos__overlay-favorite--pending {
+  animation: mmm-sonos-favorite-pulse 1s ease-in-out infinite;
+}
+
+@keyframes mmm-sonos-favorite-pulse {
+  0%, 100% { background: rgba(255, 255, 255, 0.06); }
+  50% { background: rgba(255, 255, 255, 0.2); }
+}
+
 .mmm-sonos__overlay-favorites-empty {
   opacity: 0.6;
   font-size: 0.9em;
