@@ -413,6 +413,15 @@ With `enableControls: true`:
   play/pause, a volume slider, and a list of your Sonos favorites.
 - The volume slider controls the whole group together: every speaker in
   that group is set to the same volume level, not just the coordinator.
+- Once a zone has more than one speaker, a collapsed "▾ Per-speaker volume"
+  section appears below the group slider with one slider per member, for
+  adjusting a single speaker without moving the rest of the group.
+- A "Speakers" button in the overlay header opens a picker for changing
+  group membership: pick another zone to merge every one of its speakers
+  into the one you're viewing, or tap "Remove" next to a member to split
+  it back out into its own standalone zone. The picker stays open after
+  each tap (each row briefly disables itself mid-request) so you can pull
+  in several zones, or remove several members, in one sitting.
 - Favorites come directly from what you've saved in the Sonos app
   (via Sonos' own favorites list) — there is no separate config-defined
   station list to maintain.
@@ -601,8 +610,8 @@ Some ideas for future improvements:
 - ~~Show the playback source (Spotify, Radio, Line-in) with an icon.~~ ✅ **Completed**
 - ~~Include a simple progress indicator for the current track.~~ ✅ **Completed**
 - ~~Cache album art locally for faster loading on slower networks.~~ ✅ **Completed**
-- Adjust volume on individual speakers in a group, in addition to group volume.
-- Possibility to group and ungroup speakers.
+- ~~Adjust volume on individual speakers in a group, in addition to group volume.~~ ✅ **Completed**
+- ~~Possibility to group and ungroup speakers.~~ ✅ **Completed**
 - Skip to the next/previous track directly from the control overlay, not just play/pause.
 - Add a sleep timer — automatically pause playback after N minutes.
 - Add a mute button per speaker, in addition to the volume slider.

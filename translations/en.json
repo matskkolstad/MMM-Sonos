@@ -25,5 +25,11 @@
   "ZONE_UNAVAILABLE": "This speaker is no longer available",
   "SONOS_CONTROL": "Sonos",
   "NOW_PLAYING": "Now Playing",
-  "MORE_SPEAKERS": "More speakers"
+  "MORE_SPEAKERS": "More speakers",
+  "SPEAKERS": "Speakers",
+  "PER_SPEAKER_VOLUME": "Per-speaker volume",
+  "CURRENT_GROUP": "Current group",
+  "REMOVE": "Remove",
+  "JOIN_SPEAKER": "Join another speaker/group",
+  "NO_OTHER_SPEAKERS": "No other speakers found"
 }

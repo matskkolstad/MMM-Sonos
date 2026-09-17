@@ -834,3 +834,131 @@
   cursor: pointer;
   font-size: 0.95em;
 }
+
+.mmm-sonos__overlay-speakers-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: #fff;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.8em;
+  margin-left: auto;
+  margin-right: 0.5rem;
+}
+
+.mmm-sonos__overlay-member-volumes:empty {
+  display: none;
+}
+
+.mmm-sonos__overlay-member-volumes-toggle {
+  background: none;
+  border: none;
+  color: #fff;
+  opacity: 0.75;
+  padding: 0;
+  font-size: 0.85em;
+  cursor: pointer;
+  text-align: left;
+}
+
+.mmm-sonos__overlay-member-volumes-list[hidden] {
+  display: none;
+}
+
+.mmm-sonos__overlay-member-volumes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.mmm-sonos__overlay-member-volume-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.mmm-sonos__overlay-member-volume-name {
+  min-width: 6em;
+  font-size: 0.85em;
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mmm-sonos__overlay-member-volume-slider {
+  flex: 1;
+}
+
+.mmm-sonos__overlay-member-volume-label {
+  min-width: 3em;
+  text-align: right;
+  opacity: 0.85;
+  font-size: 0.85em;
+}
+
+.mmm-sonos__speakers-heading {
+  font-size: 0.85em;
+  font-weight: 600;
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.4rem;
+}
+
+.mmm-sonos__speakers-current {
+  display: flex;
+  flex-direction: column;
+}
+
+.mmm-sonos__speakers-member-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+  margin-bottom: 0.4rem;
+  font-size: 0.95em;
+}
+
+.mmm-sonos__speakers-remove-btn {
+  background: rgba(229, 72, 77, 0.25);
+  border: none;
+  color: #fff;
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85em;
+}
+
+.mmm-sonos__speakers-join {
+  display: flex;
+  flex-direction: column;
+}
+
+.mmm-sonos__speakers-join-item {
+  text-align: left;
+  background: rgba(255, 255, 255, 0.06);
+  border: none;
+  color: #fff;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.95em;
+  margin-bottom: 0.4rem;
+}
+
+.mmm-sonos__speakers-empty {
+  opacity: 0.6;
+  font-size: 0.9em;
+  padding: 0.5rem 0;
+}
+
+.mmm-sonos__speakers-remove-btn:disabled,
+.mmm-sonos__speakers-join-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

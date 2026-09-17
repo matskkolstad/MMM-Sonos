@@ -63,6 +63,15 @@ module.exports = NodeHelper.create({
       case 'SONOS_CONTROL_SET_VOLUME':
         this._handleSetVolume(payload?.zoneId, payload?.volume);
         break;
+      case 'SONOS_CONTROL_SET_MEMBER_VOLUME':
+        this._handleSetMemberVolume(payload?.zoneId, payload?.memberName, payload?.volume);
+        break;
+      case 'SONOS_CONTROL_JOIN_GROUP':
+        this._handleJoinGroup(payload?.zoneId, payload?.targetZoneId);
+        break;
+      case 'SONOS_CONTROL_LEAVE_GROUP':
+        this._handleLeaveGroup(payload?.zoneId, payload?.memberName);
+        break;
       case 'SONOS_CONTROL_PLAY_FAVORITE':
         this._handlePlayFavorite(payload?.zoneId, payload?.favoriteId);
         break;
@@ -316,9 +325,12 @@ module.exports = NodeHelper.create({
       this._sendControlResult(zoneId, 'setVolume', false, 'Zone not found');
       return;
     }
-    const targets = (zone.memberHosts && zone.memberHosts.length)
-      ? zone.memberHosts
-      : (zone.coordinatorHost ? [{ host: zone.coordinatorHost, port: 1400 }] : []);
+    const targets = (zone.memberDetails || [])
+      .filter((m) => m.host)
+      .map((m) => ({ host: m.host, port: m.port || 1400 }));
+    if (!targets.length && zone.coordinatorHost) {
+      targets.push({ host: zone.coordinatorHost, port: zone.coordinatorPort || 1400 });
+    }
     if (!targets.length) {
       this._sendControlResult(zoneId, 'setVolume', false, 'No reachable speakers in zone');
       return;
@@ -328,6 +340,64 @@ module.exports = NodeHelper.create({
       this._sendControlResult(zoneId, 'setVolume', true);
     } catch (error) {
       this._sendControlResult(zoneId, 'setVolume', false, error?.message || String(error));
+    }
+  },
+
+  async _handleSetMemberVolume(zoneId, memberName, volume) {
+    const zone = this._findZone(zoneId);
+    if (!zone) {
+      this._sendControlResult(zoneId, 'setMemberVolume', false, 'Zone not found');
+      return;
+    }
+    const target = this._resolveMemberTarget(zone, memberName);
+    if (!target) {
+      this._sendControlResult(zoneId, 'setMemberVolume', false, 'Speaker not found in zone');
+      return;
+    }
+    try {
+      await new Sonos(target.host, target.port).setVolume(volume);
+      this._sendControlResult(zoneId, 'setMemberVolume', true);
+    } catch (error) {
+      this._sendControlResult(zoneId, 'setMemberVolume', false, error?.message || String(error));
+    }
+  },
+
+  async _handleJoinGroup(zoneId, targetZoneId) {
+    const zone = this._findZone(zoneId);
+    const targetZone = this._findZone(targetZoneId);
+    const plan = this._resolveJoinGroupPlan(zone, targetZone);
+    if (plan.error) {
+      this._sendControlResult(zoneId, 'joinGroup', false, plan.error);
+      return;
+    }
+    try {
+      // Move every member of the target zone individually — joinGroup() moves only the
+      // one device it's called on, so joining just the target's coordinator would strand
+      // its own followers (if the target itself already has more than one speaker)
+      // instead of bringing all of them into the current group.
+      await Promise.all(
+        plan.targetMembers.map((member) => new Sonos(member.host, member.port).joinGroup(plan.anchorRoomName))
+      );
+      this._sendControlResult(zoneId, 'joinGroup', true);
+      this._refresh();
+    } catch (error) {
+      this._sendControlResult(zoneId, 'joinGroup', false, error?.message || String(error));
+    }
+  },
+
+  async _handleLeaveGroup(zoneId, memberName) {
+    const zone = this._findZone(zoneId);
+    const target = this._resolveLeaveGroupTarget(zone, memberName);
+    if (target.error) {
+      this._sendControlResult(zoneId, 'leaveGroup', false, target.error);
+      return;
+    }
+    try {
+      await new Sonos(target.host, target.port).leaveGroup();
+      this._sendControlResult(zoneId, 'leaveGroup', true);
+      this._refresh();
+    } catch (error) {
+      this._sendControlResult(zoneId, 'leaveGroup', false, error?.message || String(error));
     }
   },
 
@@ -378,33 +448,14 @@ module.exports = NodeHelper.create({
         : typeof membersRaw === 'object'
         ? Object.values(membersRaw)
         : [];
-      const members = [];
-      const memberHosts = [];
-      let skipGroup = false;
-
       if (hiddenGroups.has((id || '').toLowerCase()) || hiddenGroups.has((name || '').toLowerCase())) {
         this.sendDebug('Skipping hidden group', name || id);
         continue;
       }
 
-      for (const member of memberList) {
-        const displayName = this._pick(member, ['roomName', 'name', 'ZoneName']);
-        if (!displayName) {
-          continue;
-        }
-        if (hiddenSpeakers.has(displayName.toLowerCase())) {
-          this.sendDebug('Skipping group because member is hidden', displayName, name);
-          skipGroup = true;
-          break;
-        }
-        members.push(displayName);
-        const memberHost = this._resolveMemberHost(member);
-        if (memberHost) {
-          memberHosts.push(memberHost);
-        }
-      }
-
+      const { members, memberDetails, skipGroup } = this._buildMemberDetails(memberList, hiddenSpeakers);
       if (skipGroup) {
+        this.sendDebug('Skipping group because a member is hidden', name || id);
         continue;
       }
 
@@ -568,11 +619,36 @@ module.exports = NodeHelper.create({
         }
 
         const coordinatorName = await this._inferCoordinatorName(coordinator);
+        const effectiveMembers = members.length ? members : [coordinatorName || name || 'Sonos'];
+        let effectiveMemberDetails = memberDetails.length
+          ? memberDetails
+          : [{ name: effectiveMembers[0], host: coordinator.host || null, port: coordinator.port || 1400 }];
+
+        // Per-speaker volumes are only needed by the touch-control overlay, so skip the
+        // extra network round trips (one getVolume() per member) unless controls are on.
+        if (this.config.enableControls && effectiveMemberDetails.length > 1) {
+          effectiveMemberDetails = await Promise.all(
+            effectiveMemberDetails.map(async (member) => {
+              if (!member.host) {
+                return { ...member, volume: null };
+              }
+              try {
+                const memberVolume = await new Sonos(member.host, member.port || 1400).getVolume();
+                return { ...member, volume: memberVolume };
+              } catch (error) {
+                this.sendDebug('Failed to fetch member volume', member.name, error?.message || error);
+                return { ...member, volume: null };
+              }
+            })
+          );
+        }
+
         formatted.push({
           id: id || coordinator.uuid || coordinator.host,
           name: name || coordinatorName || 'Sonos',
           coordinatorHost: coordinator.host || null,
-          memberHosts: memberHosts.length ? memberHosts : (coordinator.host ? [{ host: coordinator.host, port: coordinator.port || 1400 }] : []),
+          coordinatorPort: coordinator.port || 1400,
+          memberDetails: effectiveMemberDetails,
           playbackState: state,
           title: displayTitle,
           artist: displayArtist,
@@ -586,7 +662,7 @@ module.exports = NodeHelper.create({
           volume,
           position,
           duration,
-          members: members.length ? members : [coordinatorName || name || 'Sonos']
+          members: effectiveMembers
         });
       } catch (error) {
         this.sendDebug('Failed to fetch data for group', name || id, error?.message || error);
@@ -645,6 +721,65 @@ module.exports = NodeHelper.create({
       this.sendDebug('Failed to parse member location', location, error?.message || error);
       return null;
     }
+  },
+
+  // Builds `members` (display names) and `memberDetails` ({name, host, port}) from the
+  // same pass over the raw member list, so a member always pairs with the right host even
+  // when its location can't be resolved — the two used to be built as separate arrays that
+  // could silently desync.
+  _buildMemberDetails(memberList, hiddenSpeakers) {
+    const members = [];
+    const memberDetails = [];
+    let skipGroup = false;
+    for (const member of memberList) {
+      const displayName = this._pick(member, ['roomName', 'name', 'ZoneName']);
+      if (!displayName) continue;
+      if (hiddenSpeakers.has(displayName.toLowerCase())) {
+        skipGroup = true;
+        break;
+      }
+      members.push(displayName);
+      const host = this._resolveMemberHost(member);
+      memberDetails.push({ name: displayName, host: host ? host.host : null, port: host ? host.port : null });
+    }
+    return { members, memberDetails, skipGroup };
+  },
+
+  // Finds the {host, port} of one named member within a zone, for per-speaker volume and
+  // leave-group actions that must target a single device rather than the whole group.
+  _resolveMemberTarget(zone, memberName) {
+    if (!zone || !memberName) return null;
+    const target = (zone.memberDetails || []).find(
+      (m) => (m.name || '').toLowerCase() === memberName.toLowerCase()
+    );
+    if (!target || !target.host) return null;
+    return { host: target.host, port: target.port || 1400 };
+  },
+
+  _resolveLeaveGroupTarget(zone, memberName) {
+    if (!zone) return { error: 'Zone not found' };
+    if ((zone.memberDetails || []).length <= 1) {
+      return { error: 'Zone has only one speaker' };
+    }
+    const target = this._resolveMemberTarget(zone, memberName);
+    if (!target) return { error: 'Speaker not found in zone' };
+    return { host: target.host, port: target.port };
+  },
+
+  // joinGroup() called on a device moves only THAT device to follow a new coordinator —
+  // it does not bring that device's own followers with it. So merging target zone T into
+  // the currently-open zone G must move every one of T's member devices individually to
+  // join G (using one of G's own room names as the anchor), never a member of G itself —
+  // otherwise, if G already has more than one speaker, redirecting G's own coordinator to
+  // join something else abandons G's other members instead of extending the group.
+  _resolveJoinGroupPlan(zone, targetZone) {
+    if (!zone || !(zone.members || []).length) return { error: 'Zone not found' };
+    if (!targetZone) return { error: 'Target zone not found' };
+    if (targetZone.id === zone.id) return { error: 'Already in that group' };
+    const anchorRoomName = zone.members[0];
+    const targetMembers = (targetZone.memberDetails || []).filter((m) => m.host);
+    if (!targetMembers.length) return { error: 'Target zone has no reachable speakers' };
+    return { anchorRoomName, targetMembers };
   },
 
   async _inferCoordinatorName(coordinator) {

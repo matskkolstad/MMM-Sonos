@@ -1076,3 +1076,229 @@ describe('_findZone()', () => {
     assert.equal(_findZone(undefined, 'zone-1'), null);
   });
 });
+
+// Pure copy of the new `_buildMemberDetails()` helper from node_helper.js.
+function _buildMemberDetails(memberList, hiddenSpeakers) {
+  const members = [];
+  const memberDetails = [];
+  let skipGroup = false;
+  for (const member of memberList) {
+    const displayName = _pick(member, ['roomName', 'name', 'ZoneName']);
+    if (!displayName) continue;
+    if (hiddenSpeakers.has(displayName.toLowerCase())) {
+      skipGroup = true;
+      break;
+    }
+    members.push(displayName);
+    const host = _resolveMemberHost(member);
+    memberDetails.push({ name: displayName, host: host ? host.host : null, port: host ? host.port : null });
+  }
+  return { members, memberDetails, skipGroup };
+}
+
+describe('_buildMemberDetails()', () => {
+  it('pairs each member name with its resolved host', () => {
+    const result = _buildMemberDetails(
+      [
+        { roomName: 'Living Room', Location: 'http://192.168.1.10:1400/xml/device_description.xml' },
+        { roomName: 'Kitchen', Location: 'http://192.168.1.11:1400/xml/device_description.xml' }
+      ],
+      new Set()
+    );
+    assert.deepEqual(result.members, ['Living Room', 'Kitchen']);
+    assert.deepEqual(result.memberDetails, [
+      { name: 'Living Room', host: '192.168.1.10', port: 1400 },
+      { name: 'Kitchen', host: '192.168.1.11', port: 1400 }
+    ]);
+    assert.equal(result.skipGroup, false);
+  });
+
+  it('keeps members and memberDetails paired when a host cannot be resolved', () => {
+    // Regression test: the old code pushed to two separate arrays independently,
+    // so a member with an unresolvable host would desync memberDetails from members.
+    const result = _buildMemberDetails(
+      [
+        { roomName: 'Living Room', Location: 'not-a-url' },
+        { roomName: 'Kitchen', Location: 'http://192.168.1.11:1400/xml/device_description.xml' }
+      ],
+      new Set()
+    );
+    assert.deepEqual(result.members, ['Living Room', 'Kitchen']);
+    assert.equal(result.memberDetails.length, 2);
+    assert.equal(result.memberDetails[0].name, 'Living Room');
+    assert.equal(result.memberDetails[0].host, null);
+    assert.equal(result.memberDetails[1].name, 'Kitchen');
+    assert.equal(result.memberDetails[1].host, '192.168.1.11');
+  });
+
+  it('skips members with no resolvable display name', () => {
+    const result = _buildMemberDetails([{ Location: 'http://192.168.1.10:1400/x' }], new Set());
+    assert.deepEqual(result.members, []);
+    assert.deepEqual(result.memberDetails, []);
+  });
+
+  it('marks skipGroup and stops once a hidden speaker is found', () => {
+    const result = _buildMemberDetails(
+      [
+        { roomName: 'Living Room', Location: 'http://192.168.1.10:1400/x' },
+        { roomName: 'Bathroom', Location: 'http://192.168.1.12:1400/x' },
+        { roomName: 'Kitchen', Location: 'http://192.168.1.11:1400/x' }
+      ],
+      new Set(['bathroom'])
+    );
+    assert.equal(result.skipGroup, true);
+    assert.deepEqual(result.members, ['Living Room']);
+  });
+});
+
+// Pure copy of the new `_resolveMemberTarget()` helper from node_helper.js.
+function _resolveMemberTarget(zone, memberName) {
+  if (!zone || !memberName) return null;
+  const target = (zone.memberDetails || []).find(
+    (m) => (m.name || '').toLowerCase() === memberName.toLowerCase()
+  );
+  if (!target || !target.host) return null;
+  return { host: target.host, port: target.port || 1400 };
+}
+
+describe('_resolveMemberTarget()', () => {
+  const zone = {
+    memberDetails: [
+      { name: 'Living Room', host: '192.168.1.10', port: 1400 },
+      { name: 'Kitchen', host: '192.168.1.11', port: 1400 },
+      { name: 'Unreachable', host: null, port: null }
+    ]
+  };
+
+  it('returns host/port for a matching member name', () => {
+    assert.deepEqual(_resolveMemberTarget(zone, 'Kitchen'), { host: '192.168.1.11', port: 1400 });
+  });
+
+  it('matches case-insensitively', () => {
+    assert.deepEqual(_resolveMemberTarget(zone, 'kitchen'), { host: '192.168.1.11', port: 1400 });
+  });
+
+  it('returns null when the name is not found', () => {
+    assert.equal(_resolveMemberTarget(zone, 'Bathroom'), null);
+  });
+
+  it('returns null when the matched member has no host', () => {
+    assert.equal(_resolveMemberTarget(zone, 'Unreachable'), null);
+  });
+
+  it('returns null for a missing zone or member name', () => {
+    assert.equal(_resolveMemberTarget(null, 'Kitchen'), null);
+    assert.equal(_resolveMemberTarget(zone, null), null);
+  });
+});
+
+// Pure copy of the new `_resolveLeaveGroupTarget()` helper from node_helper.js.
+function _resolveLeaveGroupTarget(zone, memberName) {
+  if (!zone) return { error: 'Zone not found' };
+  if ((zone.memberDetails || []).length <= 1) {
+    return { error: 'Zone has only one speaker' };
+  }
+  const target = _resolveMemberTarget(zone, memberName);
+  if (!target) return { error: 'Speaker not found in zone' };
+  return { host: target.host, port: target.port };
+}
+
+describe('_resolveLeaveGroupTarget()', () => {
+  const multiMemberZone = {
+    memberDetails: [
+      { name: 'Living Room', host: '192.168.1.10', port: 1400 },
+      { name: 'Kitchen', host: '192.168.1.11', port: 1400 }
+    ]
+  };
+  const singleMemberZone = {
+    memberDetails: [{ name: 'Living Room', host: '192.168.1.10', port: 1400 }]
+  };
+
+  it('returns host/port for a valid member in a multi-member zone', () => {
+    assert.deepEqual(_resolveLeaveGroupTarget(multiMemberZone, 'Kitchen'), { host: '192.168.1.11', port: 1400 });
+  });
+
+  it('returns an error when the zone has only one speaker', () => {
+    const result = _resolveLeaveGroupTarget(singleMemberZone, 'Living Room');
+    assert.equal(result.host, undefined);
+    assert.match(result.error, /only one speaker/i);
+  });
+
+  it('returns an error when the member name is not found in the zone', () => {
+    const result = _resolveLeaveGroupTarget(multiMemberZone, 'Bathroom');
+    assert.match(result.error, /not found/i);
+  });
+});
+
+// Pure copy of the new `_resolveJoinGroupPlan()` helper from node_helper.js.
+//
+// joinGroup() called on a device moves only THAT device to follow a new coordinator —
+// it does not bring that device's own followers with it. So merging target zone T into
+// the currently-open zone G must move every one of T's member devices individually to
+// join G (using one of G's own room names as the anchor), never a member of G itself —
+// otherwise, if G already has more than one speaker, redirecting G's own coordinator to
+// join something else abandons G's other members instead of extending the group.
+function _resolveJoinGroupPlan(zone, targetZone) {
+  if (!zone || !(zone.members || []).length) return { error: 'Zone not found' };
+  if (!targetZone) return { error: 'Target zone not found' };
+  if (targetZone.id === zone.id) return { error: 'Already in that group' };
+  const anchorRoomName = zone.members[0];
+  const targetMembers = (targetZone.memberDetails || []).filter((m) => m.host);
+  if (!targetMembers.length) return { error: 'Target zone has no reachable speakers' };
+  return { anchorRoomName, targetMembers };
+}
+
+describe('_resolveJoinGroupPlan()', () => {
+  const zone = { id: 'zone-1', members: ['Living Room', 'Kitchen'] };
+  const targetZone = {
+    id: 'zone-2',
+    members: ['Patio', 'Garage'],
+    memberDetails: [
+      { name: 'Patio', host: '192.168.1.20', port: 1400 },
+      { name: 'Garage', host: '192.168.1.21', port: 1400 }
+    ]
+  };
+
+  it('returns the anchor room and every reachable target member for a valid join', () => {
+    assert.deepEqual(_resolveJoinGroupPlan(zone, targetZone), {
+      anchorRoomName: 'Living Room',
+      targetMembers: [
+        { name: 'Patio', host: '192.168.1.20', port: 1400 },
+        { name: 'Garage', host: '192.168.1.21', port: 1400 }
+      ]
+    });
+  });
+
+  it('omits target members with no resolvable host', () => {
+    const partiallyUnreachable = {
+      id: 'zone-2',
+      members: ['Patio', 'Garage'],
+      memberDetails: [
+        { name: 'Patio', host: '192.168.1.20', port: 1400 },
+        { name: 'Garage', host: null, port: null }
+      ]
+    };
+    const result = _resolveJoinGroupPlan(zone, partiallyUnreachable);
+    assert.deepEqual(result.targetMembers, [{ name: 'Patio', host: '192.168.1.20', port: 1400 }]);
+  });
+
+  it('returns an error when the current zone has no members', () => {
+    const result = _resolveJoinGroupPlan({ id: 'zone-1', members: [] }, targetZone);
+    assert.match(result.error, /zone not found/i);
+  });
+
+  it('returns an error when the target zone is missing', () => {
+    const result = _resolveJoinGroupPlan(zone, null);
+    assert.match(result.error, /target zone not found/i);
+  });
+
+  it('returns an error when the target zone is the same as the current zone', () => {
+    const result = _resolveJoinGroupPlan(zone, { id: 'zone-1', members: ['Kitchen'] });
+    assert.match(result.error, /already/i);
+  });
+
+  it('returns an error when the target zone has no reachable speakers', () => {
+    const result = _resolveJoinGroupPlan(zone, { id: 'zone-2', members: ['Patio'], memberDetails: [] });
+    assert.match(result.error, /no reachable speakers/i);
+  });
+});

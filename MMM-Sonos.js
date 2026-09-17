@@ -82,11 +82,20 @@ Module.register('MMM-Sonos', {
     this._fullUpdateDebounceTimer = null;
     this.favorites = [];
     this._activeControlZoneId = null;
+    // Sonos re-assigns the zone group `id` on every topology change, so a group/ungroup
+    // action we trigger ourselves makes the open overlay's own zone id go stale as soon as
+    // the next refresh lands. We remember one member's name from when the overlay opened
+    // and use it to re-locate the (now differently-id'd) zone that still contains it.
+    this._activeControlAnchorName = null;
     this._controlOverlayEl = null;
     this._controlVolumeDebounceTimer = null;
+    this._controlMemberVolumeDebounceTimers = new Map();
     this._moreSpeakersOverlayEl = null;
+    this._speakersOverlayEl = null;
+    this._speakersOverlayBusy = false;
     this._renderedFavoritesRef = null;
     this._renderedActiveTitle = null;
+    this._renderedMemberNamesKey = null;
 
   this._log('Starting MMM-Sonos module');
     this.sendSocketNotification('SONOS_CONFIG', this.config);
@@ -507,6 +516,164 @@ Module.register('MMM-Sonos', {
     this._renderMoreSpeakersList();
   },
 
+  // "Speakers" picker opened from the control overlay: lets the open zone absorb another
+  // zone (group) or shed one of its own members (ungroup). Layers on top of the control
+  // overlay the same way the more-speakers picker layers on top of the card grid.
+  _openSpeakersOverlay() {
+    this._buildSpeakersOverlay();
+  },
+
+  _closeSpeakersOverlay() {
+    this._speakersOverlayBusy = false;
+    if (this._speakersOverlayEl) {
+      this._speakersOverlayEl.remove();
+      this._speakersOverlayEl = null;
+    }
+  },
+
+  _buildSpeakersOverlay() {
+    this._closeSpeakersOverlay();
+
+    const group = this._locateActiveGroup();
+    if (!group) {
+      return;
+    }
+    // No action in flight on a freshly-opened picker.
+    this._speakersOverlayBusy = false;
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'mmm-sonos__overlay-backdrop';
+    backdrop.dataset.moduleId = this.identifier;
+    backdrop.addEventListener('click', (event) => {
+      if (event.target === backdrop) {
+        this._closeSpeakersOverlay();
+      }
+    });
+
+    const sheet = document.createElement('div');
+    sheet.className = 'mmm-sonos__overlay-sheet';
+
+    const header = document.createElement('div');
+    header.className = 'mmm-sonos__overlay-header';
+    const title = document.createElement('span');
+    title.className = 'mmm-sonos__overlay-title';
+    title.innerText = this.translate('SPEAKERS');
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'mmm-sonos__overlay-close';
+    closeBtn.innerText = '×';
+    closeBtn.setAttribute('aria-label', this.translate('CLOSE'));
+    closeBtn.addEventListener('click', () => this._closeSpeakersOverlay());
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+    sheet.appendChild(header);
+
+    const currentSection = document.createElement('div');
+    currentSection.className = 'mmm-sonos__speakers-current';
+    sheet.appendChild(currentSection);
+
+    const joinSection = document.createElement('div');
+    joinSection.className = 'mmm-sonos__speakers-join';
+    sheet.appendChild(joinSection);
+
+    backdrop.appendChild(sheet);
+    document.body.appendChild(backdrop);
+    this._speakersOverlayEl = backdrop;
+
+    this._renderSpeakersOverlayContent();
+  },
+
+  _renderSpeakersOverlayContent() {
+    if (!this._speakersOverlayEl) {
+      return;
+    }
+    const group = this._locateActiveGroup();
+    if (!group) {
+      this._closeSpeakersOverlay();
+      return;
+    }
+
+    const currentSection = this._speakersOverlayEl.querySelector('.mmm-sonos__speakers-current');
+    const joinSection = this._speakersOverlayEl.querySelector('.mmm-sonos__speakers-join');
+    if (!currentSection || !joinSection) {
+      return;
+    }
+    currentSection.innerHTML = '';
+    joinSection.innerHTML = '';
+
+    // While a join/leave is in flight, every row renders disabled — not just the one
+    // tapped. A join calls joinGroup() on the OPEN zone's current coordinator; if that
+    // zone was just made a satellite by a still-in-flight prior join, calling it again
+    // before we know the real topology would peel that speaker back out into a new group
+    // instead of extending it. Serializing taps sidesteps that race entirely. The list
+    // re-enables itself as soon as the next SONOS_DATA tick confirms the real state (see
+    // _syncSpeakersOverlay), whether the action succeeded or failed.
+    const busy = this._speakersOverlayBusy;
+
+    if ((group.members || []).length > 1) {
+      const heading = document.createElement('div');
+      heading.className = 'mmm-sonos__speakers-heading';
+      heading.innerText = this.translate('CURRENT_GROUP');
+      currentSection.appendChild(heading);
+
+      group.members.forEach((memberName) => {
+        const row = document.createElement('div');
+        row.className = 'mmm-sonos__speakers-member-row';
+        const label = document.createElement('span');
+        label.innerText = memberName;
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'mmm-sonos__speakers-remove-btn';
+        removeBtn.innerText = this.translate('REMOVE');
+        removeBtn.disabled = busy;
+        removeBtn.addEventListener('click', () => {
+          this._speakersOverlayBusy = true;
+          this.sendSocketNotification('SONOS_CONTROL_LEAVE_GROUP', { zoneId: group.id, memberName });
+          this._renderSpeakersOverlayContent();
+        });
+        row.appendChild(label);
+        row.appendChild(removeBtn);
+        currentSection.appendChild(row);
+      });
+    }
+
+    const otherZones = (this.groups || []).filter((g) => g.id !== group.id);
+    const joinHeading = document.createElement('div');
+    joinHeading.className = 'mmm-sonos__speakers-heading';
+    joinHeading.innerText = this.translate('JOIN_SPEAKER');
+    joinSection.appendChild(joinHeading);
+
+    if (!otherZones.length) {
+      const empty = document.createElement('div');
+      empty.className = 'mmm-sonos__speakers-empty';
+      empty.innerText = this.translate('NO_OTHER_SPEAKERS');
+      joinSection.appendChild(empty);
+      return;
+    }
+
+    otherZones.forEach((zone) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'mmm-sonos__speakers-join-item';
+      item.innerText = zone.name || '';
+      item.disabled = busy;
+      item.addEventListener('click', () => {
+        // Stay open (rather than close-on-tap) so several zones can be joined one after
+        // another in one sitting — a joined zone naturally drops out of this list and its
+        // members appear under "Current group" once the topology change lands.
+        this._speakersOverlayBusy = true;
+        this.sendSocketNotification('SONOS_CONTROL_JOIN_GROUP', { zoneId: group.id, targetZoneId: zone.id });
+        this._renderSpeakersOverlayContent();
+      });
+      joinSection.appendChild(item);
+    });
+  },
+
+  _syncSpeakersOverlay() {
+    this._speakersOverlayBusy = false;
+    this._renderSpeakersOverlayContent();
+  },
+
   _renderGroup(group) {
     if (!group) {
       return null;
@@ -862,16 +1029,35 @@ Module.register('MMM-Sonos', {
     return (this.groups || []).find((g) => g.id === zoneId) || null;
   },
 
+  // Resolves the zone currently shown in the control overlay, following it across a
+  // group/ungroup action that changed its id — see `_activeControlAnchorName` above.
+  _locateActiveGroup() {
+    let group = this._findGroupById(this._activeControlZoneId);
+    if (!group && this._activeControlAnchorName) {
+      const anchor = this._activeControlAnchorName.toLowerCase();
+      group = (this.groups || []).find((g) => (g.members || []).some((m) => m.toLowerCase() === anchor)) || null;
+      if (group) {
+        this._activeControlZoneId = group.id;
+      }
+    }
+    return group;
+  },
+
   _openControlOverlay(zoneId) {
     if (!this.config.enableControls) {
       return;
     }
     this._activeControlZoneId = zoneId;
+    const group = this._findGroupById(zoneId);
+    this._activeControlAnchorName = group?.members?.[0] || null;
     this._buildControlOverlay();
   },
 
   _closeControlOverlay() {
     this._activeControlZoneId = null;
+    this._activeControlAnchorName = null;
+    this._controlMemberVolumeDebounceTimers.clear();
+    this._closeSpeakersOverlay();
     if (this._controlOverlayEl) {
       this._controlOverlayEl.remove();
       this._controlOverlayEl = null;
@@ -888,15 +1074,27 @@ Module.register('MMM-Sonos', {
     }, 150);
   },
 
+  _debounceSetMemberVolume(zoneId, memberName, volume) {
+    if (this._controlMemberVolumeDebounceTimers.has(memberName)) {
+      clearTimeout(this._controlMemberVolumeDebounceTimers.get(memberName));
+    }
+    const timer = setTimeout(() => {
+      this._controlMemberVolumeDebounceTimers.delete(memberName);
+      this.sendSocketNotification('SONOS_CONTROL_SET_MEMBER_VOLUME', { zoneId, memberName, volume });
+    }, 150);
+    this._controlMemberVolumeDebounceTimers.set(memberName, timer);
+  },
+
   _buildControlOverlay() {
     if (this._controlOverlayEl) {
       this._controlOverlayEl.remove();
       this._controlOverlayEl = null;
     }
 
-    const group = this._findGroupById(this._activeControlZoneId);
+    const group = this._locateActiveGroup();
     if (!group) {
       this._activeControlZoneId = null;
+      this._activeControlAnchorName = null;
       return;
     }
 
@@ -917,6 +1115,12 @@ Module.register('MMM-Sonos', {
     const title = document.createElement('span');
     title.className = 'mmm-sonos__overlay-title';
     title.innerText = group.name || '';
+    const speakersBtn = document.createElement('button');
+    speakersBtn.type = 'button';
+    speakersBtn.className = 'mmm-sonos__overlay-speakers-btn';
+    speakersBtn.innerText = this.translate('SPEAKERS');
+    speakersBtn.setAttribute('aria-label', this.translate('SPEAKERS'));
+    speakersBtn.addEventListener('click', () => this._openSpeakersOverlay());
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
     closeBtn.className = 'mmm-sonos__overlay-close';
@@ -924,6 +1128,7 @@ Module.register('MMM-Sonos', {
     closeBtn.setAttribute('aria-label', this.translate('CLOSE'));
     closeBtn.addEventListener('click', () => this._closeControlOverlay());
     header.appendChild(title);
+    header.appendChild(speakersBtn);
     header.appendChild(closeBtn);
     sheet.appendChild(header);
 
@@ -972,6 +1177,11 @@ Module.register('MMM-Sonos', {
     volumeRow.appendChild(volumeLabel);
     sheet.appendChild(volumeRow);
 
+    const memberVolumesSection = document.createElement('div');
+    memberVolumesSection.className = 'mmm-sonos__overlay-member-volumes';
+    sheet.appendChild(memberVolumesSection);
+    this._renderMemberVolumesSection(memberVolumesSection, group);
+
     const favoritesList = document.createElement('div');
     favoritesList.className = 'mmm-sonos__overlay-favorites';
     sheet.appendChild(favoritesList);
@@ -979,11 +1189,68 @@ Module.register('MMM-Sonos', {
     backdrop.appendChild(sheet);
     document.body.appendChild(backdrop);
     this._controlOverlayEl = backdrop;
+    this._renderedMemberNamesKey = (group.members || []).join('|');
     this._renderControlOverlayFavorites();
   },
 
+  // Builds the collapsed-by-default "▾ Per-speaker volume" section, only shown once a
+  // zone has more than one member — a single-speaker zone's own slider above already IS
+  // that speaker's volume.
+  _renderMemberVolumesSection(container, group) {
+    container.innerHTML = '';
+    if (!group.members || group.members.length <= 1) {
+      return;
+    }
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'mmm-sonos__overlay-member-volumes-toggle';
+    toggle.innerText = `▾ ${this.translate('PER_SPEAKER_VOLUME')}`;
+    toggle.setAttribute('aria-expanded', 'false');
+    const list = document.createElement('div');
+    list.className = 'mmm-sonos__overlay-member-volumes-list';
+    list.hidden = true;
+    toggle.addEventListener('click', () => {
+      const expanded = toggle.getAttribute('aria-expanded') === 'true';
+      toggle.setAttribute('aria-expanded', String(!expanded));
+      list.hidden = expanded;
+    });
+    container.appendChild(toggle);
+    container.appendChild(list);
+    this._renderMemberVolumeRows(list, group);
+  },
+
+  _renderMemberVolumeRows(list, group) {
+    list.innerHTML = '';
+    (group.memberDetails || []).forEach((member) => {
+      const row = document.createElement('div');
+      row.className = 'mmm-sonos__overlay-member-volume-row';
+      row.dataset.memberName = member.name;
+      const label = document.createElement('span');
+      label.className = 'mmm-sonos__overlay-member-volume-name';
+      label.innerText = member.name;
+      const slider = document.createElement('input');
+      slider.type = 'range';
+      slider.min = '0';
+      slider.max = '100';
+      slider.step = String(this.config.controlVolumeStep || 5);
+      slider.value = String(member.volume ?? 0);
+      slider.className = 'mmm-sonos__overlay-member-volume-slider';
+      const volumeLabel = document.createElement('span');
+      volumeLabel.className = 'mmm-sonos__overlay-member-volume-label';
+      volumeLabel.innerText = `${slider.value}%`;
+      slider.addEventListener('input', () => {
+        volumeLabel.innerText = `${slider.value}%`;
+        this._debounceSetMemberVolume(group.id, member.name, Number(slider.value));
+      });
+      row.appendChild(label);
+      row.appendChild(slider);
+      row.appendChild(volumeLabel);
+      list.appendChild(row);
+    });
+  },
+
   _syncControlOverlay() {
-    const group = this._findGroupById(this._activeControlZoneId);
+    const group = this._locateActiveGroup();
     if (!group) {
       this._showZoneUnavailableAndClose();
       return;
@@ -1011,6 +1278,36 @@ Module.register('MMM-Sonos', {
       if (volumeLabel) {
         volumeLabel.innerText = `${group.volume}%`;
       }
+    }
+
+    // Rebuild the per-speaker volume section only when the actual set of members changed
+    // (e.g. a group/ungroup action) — otherwise just refresh the existing sliders' values,
+    // same rationale as the favorites list below: don't yank an expanded section shut or
+    // reset scroll position on every routine poll tick.
+    const memberNamesKey = (group.members || []).join('|');
+    const memberVolumesSection = this._controlOverlayEl.querySelector('.mmm-sonos__overlay-member-volumes');
+    if (memberVolumesSection && memberNamesKey !== this._renderedMemberNamesKey) {
+      this._renderMemberVolumesSection(memberVolumesSection, group);
+      this._renderedMemberNamesKey = memberNamesKey;
+    } else {
+      (group.memberDetails || []).forEach((member) => {
+        const row = this._controlOverlayEl.querySelector(
+          `.mmm-sonos__overlay-member-volume-row[data-member-name="${CSS.escape(member.name)}"]`
+        );
+        if (!row) return;
+        const memberSlider = row.querySelector('.mmm-sonos__overlay-member-volume-slider');
+        const memberLabel = row.querySelector('.mmm-sonos__overlay-member-volume-label');
+        if (memberSlider && document.activeElement !== memberSlider && member.volume != null) {
+          memberSlider.value = String(member.volume);
+          if (memberLabel) {
+            memberLabel.innerText = `${member.volume}%`;
+          }
+        }
+      });
+    }
+
+    if (this._speakersOverlayEl) {
+      this._syncSpeakersOverlay();
     }
 
     // Only rebuild the favorites list when something that affects its rendered
