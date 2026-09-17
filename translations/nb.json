@@ -17,5 +17,10 @@
   "SOURCE_LINE_IN": "Line-in",
   "SOURCE_UNKNOWN": "Ukjent",
   "VOLUME": "Volum",
-  "SOURCE_APPLE_MUSIC": "Apple Music"
+  "SOURCE_APPLE_MUSIC": "Apple Music",
+  "IDLE_LABEL": "Ingenting spilles",
+  "CLOSE": "Lukk",
+  "NO_FAVORITES": "Ingen favoritter funnet — legg til i Sonos-appen",
+  "CONTROL_ERROR": "Fikk ikke kontakt med høyttaler",
+  "ZONE_UNAVAILABLE": "Denne høyttaleren er ikke lenger tilgjengelig"
 }

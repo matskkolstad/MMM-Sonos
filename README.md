@@ -263,6 +263,10 @@ Restart MagicMirror² afterwards to load the latest code.
 | `tvIconText` | `'TV'` | Text shown when `tvIconMode` is `'text'`. Scales with `albumArtSize`. |
 | `tvIconSvgPath` | `null` | Path or URL to an SVG used when `tvIconMode` is `'svg'`. If `null`, a bundled `assets/tv-default.svg` is used. |
 | `tvLabel` | `null` | Override the text label for the TV badge (defaults to the translated "TV"). |
+| `enableControls` | `false` | Master switch for touch control mode. |
+| `favoritesRefreshInterval` | `300000` | How often (ms) the favorites list is re-fetched from Sonos. |
+| `maxFavorites` | `12` | Maximum number of favorites shown in the overlay before it scrolls. |
+| `controlVolumeStep` | `5` | Step size of the volume slider in the control overlay. |
 | `debug` | `false` | Log extra information to the MagicMirror console. |
 
 ### TV icon choices
@@ -362,6 +366,49 @@ Use `fullscreenSpeaker` to pin the card to a specific speaker. The value can be 
 | `fullscreenSpeaker` | `null` | Speaker/group to show. Accepts a speaker name, group name, group ID, or coordinator IP. When `null`, the first currently-playing group is used. |
 | `fullscreenAlbumArtSize` | `300` | Album art size in pixels. |
 | `fullscreenWidth` | `null` | Set a maximum width for the fullscreen card (e.g. `600` or `'600px'`). |
+
+### Touch control mode
+
+Setting `enableControls: true` turns MMM-Sonos from a pure display into a
+tappable control surface, for use on a touch-screen (or any mirror you're
+willing to touch). It only changes behavior in `row` and `grid`
+`displayMode` — `mini` and `fullscreen` are unaffected.
+
+```javascript
+{
+  module: 'MMM-Sonos',
+  position: 'bottom_left',
+  config: {
+    displayMode: 'row',
+    enableControls: true,
+    favoritesRefreshInterval: 300000, // how often the favorites list is re-fetched (ms)
+    maxFavorites: 12,                 // max favorites shown before the list scrolls
+    controlVolumeStep: 5              // slider step size
+  }
+}
+```
+
+With `enableControls: true`:
+
+- Every zone on the network is shown, not just ones currently playing —
+  idle speakers get a simple "Nothing playing" card instead of being
+  hidden (`hideWhenNothingPlaying` and `showWhenPaused` no longer apply).
+- Tapping any card (playing or idle) opens a control overlay with
+  play/pause, a volume slider, and a list of your Sonos favorites.
+- The volume slider controls the whole group together: every speaker in
+  that group is set to the same volume level, not just the coordinator.
+- Favorites come directly from what you've saved in the Sonos app
+  (via Sonos' own favorites list) — there is no separate config-defined
+  station list to maintain.
+
+**Touch control mode option reference:**
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `enableControls` | `false` | Master switch for touch control mode. |
+| `favoritesRefreshInterval` | `300000` | How often (ms) the favorites list is re-fetched from Sonos. |
+| `maxFavorites` | `12` | Maximum number of favorites shown in the overlay before it scrolls. |
+| `controlVolumeStep` | `5` | Step size of the volume slider in the control overlay. |
 
 ## Additional features
 

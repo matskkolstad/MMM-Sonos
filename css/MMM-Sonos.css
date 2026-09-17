@@ -646,3 +646,141 @@
 .mmm-sonos__fullscreen-group.mmm-sonos__group--accented-solid {
   background: rgba(var(--mmm-sonos-card-accent-rgb), var(--mmm-sonos-card-accent-opacity, 0.45)) !important;
 }
+
+.mmm-sonos__group--clickable {
+  cursor: pointer;
+}
+
+.mmm-sonos__group--clickable:hover,
+.mmm-sonos__group--clickable:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.4);
+  outline-offset: 2px;
+}
+
+.mmm-sonos__group--idle {
+  opacity: 0.6;
+}
+
+.mmm-sonos__idle-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+.mmm-sonos__idle-label {
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+
+.mmm-sonos__overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.mmm-sonos__overlay-sheet {
+  width: min(480px, 92vw);
+  margin-bottom: 3vh;
+  background: rgba(20, 20, 20, 0.96);
+  border-radius: 16px 16px 8px 8px;
+  padding: 1.25rem;
+  color: #fff;
+  font-size: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
+}
+
+.mmm-sonos__overlay-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mmm-sonos__overlay-title {
+  font-size: 1.1em;
+  font-weight: 600;
+}
+
+.mmm-sonos__overlay-close {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 1.4em;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+}
+
+.mmm-sonos__overlay-error {
+  background: rgba(200, 50, 50, 0.35);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9em;
+}
+
+.mmm-sonos__overlay-playpause {
+  align-self: center;
+  background: rgba(255, 255, 255, 0.12);
+  border: none;
+  color: #fff;
+  font-size: 1.8em;
+  line-height: 1;
+  width: 3.2em;
+  height: 3.2em;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.mmm-sonos__overlay-volume {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.mmm-sonos__overlay-volume-slider {
+  flex: 1;
+}
+
+.mmm-sonos__overlay-volume-label {
+  min-width: 3.5em;
+  text-align: right;
+  opacity: 0.85;
+}
+
+.mmm-sonos__overlay-favorites {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.mmm-sonos__overlay-favorite {
+  text-align: left;
+  background: rgba(255, 255, 255, 0.06);
+  border: none;
+  color: #fff;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.95em;
+}
+
+.mmm-sonos__overlay-favorite--active {
+  background: rgba(255, 255, 255, 0.22);
+  font-weight: 600;
+}
+
+.mmm-sonos__overlay-favorites-empty {
+  opacity: 0.6;
+  font-size: 0.9em;
+  padding: 0.5rem 0;
+}
