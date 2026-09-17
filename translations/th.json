@@ -17,5 +17,8 @@
   "SOURCE_LINE_IN": "ไลน์อิน",
   "SOURCE_UNKNOWN": "ไม่ทราบ",
   "VOLUME": "ระดับเสียง",
-  "SOURCE_APPLE_MUSIC": "Apple Music"
+  "SOURCE_APPLE_MUSIC": "Apple Music",
+  "SONOS_CONTROL": "Sonos",
+  "NOW_PLAYING": "กำลังเล่น",
+  "MORE_SPEAKERS": "ลำโพงเพิ่มเติม"
 }

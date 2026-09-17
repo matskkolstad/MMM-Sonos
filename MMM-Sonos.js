@@ -20,6 +20,11 @@ Module.register('MMM-Sonos', {
     forceHttps: false,
     hideWhenNothingPlaying: true,
     showWhenPaused: false,
+    enableControls: false,
+    controlShowIdleZones: true,
+    favoritesRefreshInterval: 300000,
+    maxFavorites: 12,
+    controlVolumeStep: 5,
     fadePausedGroups: true,
     showGroupMembers: true,
     showPlaybackState: false,
@@ -75,6 +80,27 @@ Module.register('MMM-Sonos', {
     this.progressAnimationTimer = null;
     this._animTransitionTimer = null;
     this._fullUpdateDebounceTimer = null;
+    this.favorites = [];
+    this._activeControlZoneId = null;
+    // Sonos re-assigns the zone group `id` on every topology change, so a group/ungroup
+    // action we trigger ourselves makes the open overlay's own zone id go stale as soon as
+    // the next refresh lands. We remember one member's name from when the overlay opened
+    // and use it to re-locate the (now differently-id'd) zone that still contains it.
+    this._activeControlAnchorName = null;
+    this._controlOverlayEl = null;
+    this._controlVolumeDebounceTimer = null;
+    this._controlMemberVolumeDebounceTimers = new Map();
+    this._moreSpeakersOverlayEl = null;
+    this._speakersOverlayEl = null;
+    this._speakersOverlayBusy = false;
+    this._renderedFavoritesRef = null;
+    this._renderedActiveTitle = null;
+    this._renderedMemberNamesKey = null;
+    // Which favorite was last tapped and is awaiting confirmation, so its row can show
+    // a "pending" state immediately instead of sitting inert until the next SONOS_DATA
+    // tick (which used to take up to a full updateInterval — see _setFavoritePending).
+    this._pendingFavoriteId = null;
+    this._pendingFavoriteTimer = null;
 
   this._log('Starting MMM-Sonos module');
     this.sendSocketNotification('SONOS_CONFIG', this.config);
@@ -82,7 +108,17 @@ Module.register('MMM-Sonos', {
     this._startProgressAnimation();
   },
 
+  // Called by MagicMirror when a page-manager (or module.hide()) hides this module.
+  // Without this, a full-viewport control overlay left open would stay stuck on
+  // screen with no way to dismiss it once the module itself is no longer visible.
+  suspend() {
+    this._closeControlOverlay();
+    this._closeMoreSpeakersOverlay();
+  },
+
   stop() {
+    this._closeControlOverlay();
+    this._closeMoreSpeakersOverlay();
     if (this.updateTimer) {
       clearInterval(this.updateTimer);
       this.updateTimer = null;
@@ -127,6 +163,14 @@ Module.register('MMM-Sonos', {
         this.lastUpdated = newTimestamp;
         this.error = null;
 
+        if (this.config.enableControls && this._activeControlZoneId) {
+          this._syncControlOverlay();
+        }
+
+        if (this.config.enableControls && this._moreSpeakersOverlayEl) {
+          this._syncMoreSpeakersOverlay();
+        }
+
         if (needsFull) {
           this._log('Structural change — full DOM update');
           this._animatedUpdateDom();
@@ -167,6 +211,17 @@ Module.register('MMM-Sonos', {
       case 'SONOS_CACHE_CLEARED':
         this._log('Album art cache cleared', payload);
         break;
+
+      case 'SONOS_CONTROL_RESULT':
+        this._handleControlResult(payload);
+        break;
+
+      case 'SONOS_FAVORITES':
+        this.favorites = payload?.favorites || [];
+        if (this._activeControlZoneId) {
+          this._renderControlOverlayFavorites();
+        }
+        break;
     }
   },
 
@@ -174,6 +229,23 @@ Module.register('MMM-Sonos', {
     return [
       this.file('css/MMM-Sonos.css')
     ];
+  },
+
+  // Only supplies an automatic header when the user hasn't set their own `header`
+  // in config — an explicit header is always respected as-is. In touch control
+  // mode, "Now Playing" style config headers become misleading once idle zones
+  // are shown alongside playing ones, so we pick text that matches what's
+  // actually on screen.
+  getHeader() {
+    if (this.data.header) {
+      return this.data.header;
+    }
+    if (this.config.enableControls) {
+      return this.config.controlShowIdleZones
+        ? this.translate('SONOS_CONTROL')
+        : this.translate('NOW_PLAYING');
+    }
+    return this.data.header;
   },
 
   getTranslations() {
@@ -321,7 +393,282 @@ Module.register('MMM-Sonos', {
       wrapper.appendChild(this._renderTimestamp());
     }
 
+    if (!isMiniMode && !isFullscreenMode) {
+      const hiddenIdleZones = this._getHiddenIdleZones();
+      if (hiddenIdleZones.length > 0) {
+        wrapper.appendChild(this._renderMoreSpeakersButton(hiddenIdleZones.length));
+      }
+    }
+
     return wrapper;
+  },
+
+  _getHiddenIdleZones() {
+    if (!this.config.enableControls || this.config.controlShowIdleZones || this.config.showWhenPaused) {
+      return [];
+    }
+    return (this.groups || [])
+      .slice(0, this.config.maxGroups)
+      .filter((group) => {
+        if (this._isHidden(group)) {
+          return false;
+        }
+        const playbackState = (group.playbackState || '').toLowerCase();
+        const isPlaying = ['playing', 'transitioning', 'buffering'].includes(playbackState);
+        return !isPlaying;
+      });
+  },
+
+  _renderMoreSpeakersButton(count) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'mmm-sonos__more-speakers-btn';
+    button.innerText = '+';
+    button.setAttribute('aria-label', this.translate('MORE_SPEAKERS'));
+    button.title = this.translate('MORE_SPEAKERS');
+    if (count > 1) {
+      const badge = document.createElement('span');
+      badge.className = 'mmm-sonos__more-speakers-badge';
+      badge.innerText = String(count);
+      button.appendChild(badge);
+    }
+    button.addEventListener('click', () => this._openMoreSpeakersOverlay());
+    return button;
+  },
+
+  _openMoreSpeakersOverlay() {
+    this._buildMoreSpeakersOverlay();
+  },
+
+  _closeMoreSpeakersOverlay() {
+    if (this._moreSpeakersOverlayEl) {
+      this._moreSpeakersOverlayEl.remove();
+      this._moreSpeakersOverlayEl = null;
+    }
+  },
+
+  // Shared shell for every full-screen overlay in this module: a backdrop (tap outside
+  // to close) wrapping a sheet with a header (title + optional extra header buttons +
+  // close button). Callers append their own body content to the returned `sheet`,
+  // `document.body.append(backdrop)`, and track it in their own `_*OverlayEl` field —
+  // this only builds the shared shell, not the overlay's specific content.
+  _buildOverlayShell(titleText, onClose, extraHeaderButtons = []) {
+    const backdrop = document.createElement('div');
+    backdrop.className = 'mmm-sonos__overlay-backdrop';
+    backdrop.dataset.moduleId = this.identifier;
+    backdrop.addEventListener('click', (event) => {
+      if (event.target === backdrop) {
+        onClose();
+      }
+    });
+
+    const sheet = document.createElement('div');
+    sheet.className = 'mmm-sonos__overlay-sheet';
+
+    const header = document.createElement('div');
+    header.className = 'mmm-sonos__overlay-header';
+    const title = document.createElement('span');
+    title.className = 'mmm-sonos__overlay-title';
+    title.innerText = titleText;
+    header.appendChild(title);
+    extraHeaderButtons.forEach((button) => header.appendChild(button));
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'mmm-sonos__overlay-close';
+    closeBtn.innerText = '×';
+    closeBtn.setAttribute('aria-label', this.translate('CLOSE'));
+    closeBtn.addEventListener('click', () => onClose());
+    header.appendChild(closeBtn);
+    sheet.appendChild(header);
+
+    backdrop.appendChild(sheet);
+    return { backdrop, sheet };
+  },
+
+  _buildMoreSpeakersOverlay() {
+    this._closeMoreSpeakersOverlay();
+
+    const { backdrop, sheet } = this._buildOverlayShell(
+      this.translate('MORE_SPEAKERS'),
+      () => this._closeMoreSpeakersOverlay()
+    );
+
+    const list = document.createElement('div');
+    list.className = 'mmm-sonos__more-speakers-list';
+    sheet.appendChild(list);
+
+    document.body.appendChild(backdrop);
+    this._moreSpeakersOverlayEl = backdrop;
+
+    this._renderMoreSpeakersList();
+  },
+
+  _renderMoreSpeakersList() {
+    if (!this._moreSpeakersOverlayEl) {
+      return;
+    }
+    const list = this._moreSpeakersOverlayEl.querySelector('.mmm-sonos__more-speakers-list');
+    if (!list) {
+      return;
+    }
+    list.innerHTML = '';
+
+    const zones = this._getHiddenIdleZones();
+    zones.forEach((zone) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'mmm-sonos__more-speakers-item';
+      item.innerText = zone.name || '';
+      item.addEventListener('click', () => {
+        this._closeMoreSpeakersOverlay();
+        this._openControlOverlay(zone.id);
+      });
+      list.appendChild(item);
+    });
+  },
+
+  _syncMoreSpeakersOverlay() {
+    const zones = this._getHiddenIdleZones();
+    if (zones.length === 0) {
+      this._closeMoreSpeakersOverlay();
+      return;
+    }
+    this._renderMoreSpeakersList();
+  },
+
+  // "Speakers" picker opened from the control overlay: lets the open zone absorb another
+  // zone (group) or shed one of its own members (ungroup). Layers on top of the control
+  // overlay the same way the more-speakers picker layers on top of the card grid.
+  _openSpeakersOverlay() {
+    this._buildSpeakersOverlay();
+  },
+
+  _closeSpeakersOverlay() {
+    this._speakersOverlayBusy = false;
+    if (this._speakersOverlayEl) {
+      this._speakersOverlayEl.remove();
+      this._speakersOverlayEl = null;
+    }
+  },
+
+  _buildSpeakersOverlay() {
+    this._closeSpeakersOverlay();
+
+    const group = this._locateActiveGroup();
+    if (!group) {
+      return;
+    }
+    // No action in flight on a freshly-opened picker.
+    this._speakersOverlayBusy = false;
+
+    const { backdrop, sheet } = this._buildOverlayShell(
+      this.translate('SPEAKERS'),
+      () => this._closeSpeakersOverlay()
+    );
+
+    const currentSection = document.createElement('div');
+    currentSection.className = 'mmm-sonos__speakers-current';
+    sheet.appendChild(currentSection);
+
+    const joinSection = document.createElement('div');
+    joinSection.className = 'mmm-sonos__speakers-join';
+    sheet.appendChild(joinSection);
+
+    document.body.appendChild(backdrop);
+    this._speakersOverlayEl = backdrop;
+
+    this._renderSpeakersOverlayContent();
+  },
+
+  _renderSpeakersOverlayContent() {
+    if (!this._speakersOverlayEl) {
+      return;
+    }
+    const group = this._locateActiveGroup();
+    if (!group) {
+      this._closeSpeakersOverlay();
+      return;
+    }
+
+    const currentSection = this._speakersOverlayEl.querySelector('.mmm-sonos__speakers-current');
+    const joinSection = this._speakersOverlayEl.querySelector('.mmm-sonos__speakers-join');
+    if (!currentSection || !joinSection) {
+      return;
+    }
+    currentSection.innerHTML = '';
+    joinSection.innerHTML = '';
+
+    // While a join/leave is in flight, every row renders disabled — not just the one
+    // tapped. A join calls joinGroup() on the OPEN zone's current coordinator; if that
+    // zone was just made a satellite by a still-in-flight prior join, calling it again
+    // before we know the real topology would peel that speaker back out into a new group
+    // instead of extending it. Serializing taps sidesteps that race entirely. The list
+    // re-enables itself as soon as the next SONOS_DATA tick confirms the real state (see
+    // _syncSpeakersOverlay), whether the action succeeded or failed.
+    const busy = this._speakersOverlayBusy;
+
+    if ((group.members || []).length > 1) {
+      const heading = document.createElement('div');
+      heading.className = 'mmm-sonos__speakers-heading';
+      heading.innerText = this.translate('CURRENT_GROUP');
+      currentSection.appendChild(heading);
+
+      group.members.forEach((memberName) => {
+        const row = document.createElement('div');
+        row.className = 'mmm-sonos__speakers-member-row';
+        const label = document.createElement('span');
+        label.innerText = memberName;
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'mmm-sonos__speakers-remove-btn';
+        removeBtn.innerText = this.translate('REMOVE');
+        removeBtn.disabled = busy;
+        removeBtn.addEventListener('click', () => {
+          this._speakersOverlayBusy = true;
+          this.sendSocketNotification('SONOS_CONTROL_LEAVE_GROUP', { zoneId: group.id, memberName });
+          this._renderSpeakersOverlayContent();
+        });
+        row.appendChild(label);
+        row.appendChild(removeBtn);
+        currentSection.appendChild(row);
+      });
+    }
+
+    const otherZones = (this.groups || []).filter((g) => g.id !== group.id);
+    const joinHeading = document.createElement('div');
+    joinHeading.className = 'mmm-sonos__speakers-heading';
+    joinHeading.innerText = this.translate('JOIN_SPEAKER');
+    joinSection.appendChild(joinHeading);
+
+    if (!otherZones.length) {
+      const empty = document.createElement('div');
+      empty.className = 'mmm-sonos__speakers-empty';
+      empty.innerText = this.translate('NO_OTHER_SPEAKERS');
+      joinSection.appendChild(empty);
+      return;
+    }
+
+    otherZones.forEach((zone) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'mmm-sonos__speakers-join-item';
+      item.innerText = zone.name || '';
+      item.disabled = busy;
+      item.addEventListener('click', () => {
+        // Stay open (rather than close-on-tap) so several zones can be joined one after
+        // another in one sitting — a joined zone naturally drops out of this list and its
+        // members appear under "Current group" once the topology change lands.
+        this._speakersOverlayBusy = true;
+        this.sendSocketNotification('SONOS_CONTROL_JOIN_GROUP', { zoneId: group.id, targetZoneId: zone.id });
+        this._renderSpeakersOverlayContent();
+      });
+      joinSection.appendChild(item);
+    });
+  },
+
+  _syncSpeakersOverlay() {
+    this._speakersOverlayBusy = false;
+    this._renderSpeakersOverlayContent();
   },
 
   _renderGroup(group) {
@@ -336,7 +683,9 @@ Module.register('MMM-Sonos', {
 
     const playbackState = (group.playbackState || '').toLowerCase();
     const isPlaying = ['playing', 'transitioning', 'buffering'].includes(playbackState);
-    if (!isPlaying && !this.config.showWhenPaused) {
+    const controlAlwaysShows = this.config.enableControls && this.config.controlShowIdleZones;
+    const isIdleControlCard = controlAlwaysShows && !isPlaying && !this.config.showWhenPaused;
+    if (!isPlaying && !this.config.showWhenPaused && !controlAlwaysShows) {
       return null;
     }
 
@@ -347,6 +696,9 @@ Module.register('MMM-Sonos', {
 
     const container = document.createElement('div');
     container.className = 'mmm-sonos__group';
+    if (isIdleControlCard) {
+      container.classList.add('mmm-sonos__group--idle');
+    }
     container.dataset.groupId = group.id;
     container.style.display = 'flex';
     container.style.gap = '0.45rem';
@@ -407,7 +759,7 @@ Module.register('MMM-Sonos', {
     const configuredSize = Number(this.config.albumArtSize);
     const sizeValue = !Number.isNaN(configuredSize) && configuredSize > 0 ? `${configuredSize}px` : null;
     const iconFontSize = !Number.isNaN(configuredSize) && configuredSize > 0 ? `${Math.round(configuredSize * 0.42)}px` : null;
-    if (group.albumArt) {
+    if (group.albumArt && !isIdleControlCard) {
       const artWrapper = document.createElement('div');
       artWrapper.className = 'mmm-sonos__art';
       if (sizeValue) {
@@ -486,6 +838,18 @@ Module.register('MMM-Sonos', {
       }
 
       container.appendChild(artWrapper);
+    } else if (isIdleControlCard) {
+      const idleWrapper = document.createElement('div');
+      idleWrapper.className = 'mmm-sonos__art mmm-sonos__idle-icon';
+      if (sizeValue) {
+        idleWrapper.style.width = sizeValue;
+        idleWrapper.style.height = sizeValue;
+      }
+      idleWrapper.innerText = '🔇';
+      if (iconFontSize) {
+        idleWrapper.style.fontSize = iconFontSize;
+      }
+      container.appendChild(idleWrapper);
     }
 
     const content = document.createElement('div');
@@ -543,7 +907,7 @@ Module.register('MMM-Sonos', {
       content.appendChild(sourceElement);
     }
 
-    const hasTrackInfo = group.title || group.artist;
+    const hasTrackInfo = !isIdleControlCard && (group.title || group.artist);
     const titleIsDuplicateTv = isTvSource && (!group.artist) && typeof group.title === 'string' && group.title.trim().toLowerCase() === 'tv';
 
     if (hasTrackInfo && !titleIsDuplicateTv) {
@@ -587,10 +951,15 @@ Module.register('MMM-Sonos', {
       }
 
       content.appendChild(titleWrapper);
+    } else if (isIdleControlCard) {
+      const idleLabel = document.createElement('div');
+      idleLabel.className = 'mmm-sonos__idle-label';
+      idleLabel.innerText = this.translate('IDLE_LABEL');
+      content.appendChild(idleLabel);
     }
 
     // Playback source indicator
-    if (this.config.showPlaybackSource && group.source && !isTvSource) {
+    if (this.config.showPlaybackSource && group.source && !isTvSource && !isIdleControlCard) {
       const sourceElement = this._renderPlaybackSource(group.source, alignment);
       if (sourceElement) {
         content.appendChild(sourceElement);
@@ -600,7 +969,7 @@ Module.register('MMM-Sonos', {
     // Progress indicator — show when duration is known and positive.
     // Treat a null position (e.g. track freshly started, RelTime not yet available) as 0.
     if (this.config.showProgress && group.duration != null && group.duration > 0) {
-      const progressElement = this._renderProgress(group.position ?? 0, group.duration, alignment);
+      const progressElement = this._renderProgress(group.position ?? 0, group.duration, alignment, isPlaying);
       if (progressElement) {
         content.appendChild(progressElement);
       }
@@ -621,6 +990,19 @@ Module.register('MMM-Sonos', {
       content.appendChild(members);
     }
 
+    if (this.config.enableControls) {
+      container.classList.add('mmm-sonos__group--clickable');
+      container.setAttribute('role', 'button');
+      container.setAttribute('tabindex', '0');
+      container.addEventListener('click', () => this._openControlOverlay(group.id));
+      container.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          this._openControlOverlay(group.id);
+        }
+      });
+    }
+
     container.appendChild(content);
     return container;
   },
@@ -638,6 +1020,436 @@ Module.register('MMM-Sonos', {
     }
     ts.innerText = `${this.translate('UPDATED')} ${date.toLocaleTimeString(this.config.dateLocale, options)}`;
     return ts;
+  },
+
+  _limitFavorites(favorites, maxFavorites) {
+    const list = favorites || [];
+    if (!maxFavorites || maxFavorites <= 0) return list;
+    return list.slice(0, maxFavorites);
+  },
+
+  // Decides whether a favorites-list row renders as active, pending (tapped, awaiting
+  // confirmation), or idle. "Active" always wins over "pending" once the group title
+  // actually catches up, so the pulsing state clears itself the moment it's confirmed.
+  _resolveFavoriteState(favorite, groupTitle, pendingFavoriteId) {
+    if (groupTitle && favorite.title === groupTitle) return 'active';
+    if (favorite.id === pendingFavoriteId) return 'pending';
+    return 'idle';
+  },
+
+  _setFavoritePending(favoriteId) {
+    if (this._pendingFavoriteTimer) {
+      clearTimeout(this._pendingFavoriteTimer);
+    }
+    this._pendingFavoriteId = favoriteId;
+    if (this._controlOverlayEl) {
+      const item = this._controlOverlayEl.querySelector(
+        `.mmm-sonos__overlay-favorite[data-favorite-id="${CSS.escape(favoriteId)}"]`
+      );
+      if (item) {
+        item.classList.add('mmm-sonos__overlay-favorite--pending');
+      }
+    }
+    // Safety net: never leave a favorite stuck "pending" if the title match never
+    // fires (e.g. a radio favorite whose saved title doesn't exactly match the
+    // display title derived for it elsewhere) or a result/refresh never arrives.
+    this._pendingFavoriteTimer = setTimeout(() => this._clearFavoritePending(), 5000);
+  },
+
+  _clearFavoritePending({ rerender = true } = {}) {
+    if (this._pendingFavoriteTimer) {
+      clearTimeout(this._pendingFavoriteTimer);
+      this._pendingFavoriteTimer = null;
+    }
+    if (this._pendingFavoriteId === null) {
+      return;
+    }
+    this._pendingFavoriteId = null;
+    if (rerender) {
+      this._renderControlOverlayFavorites();
+    }
+  },
+
+  _findGroupById(zoneId) {
+    return (this.groups || []).find((g) => g.id === zoneId) || null;
+  },
+
+  // Resolves the zone currently shown in the control overlay, following it across a
+  // group/ungroup action that changed its id — see `_activeControlAnchorName` above.
+  //
+  // Deliberate choice: the overlay follows the specific physical speaker whose card was
+  // originally tapped (the anchor), not "the group" as an abstract entity. So if the
+  // anchor speaker itself is the one removed from a group via the Speakers picker, the
+  // overlay correctly follows it into its new standalone zone, rather than staying on
+  // the larger group it just left. This only matters when the anchor happens to also be
+  // the group's coordinator (id lookup below fails only when the coordinator changes).
+  _locateActiveGroup() {
+    let group = this._findGroupById(this._activeControlZoneId);
+    if (!group && this._activeControlAnchorName) {
+      const anchor = this._activeControlAnchorName.toLowerCase();
+      group = (this.groups || []).find((g) => (g.members || []).some((m) => m.toLowerCase() === anchor)) || null;
+      if (group) {
+        this._activeControlZoneId = group.id;
+      }
+    }
+    return group;
+  },
+
+  _openControlOverlay(zoneId) {
+    if (!this.config.enableControls) {
+      return;
+    }
+    this._activeControlZoneId = zoneId;
+    const group = this._findGroupById(zoneId);
+    this._activeControlAnchorName = group?.members?.[0] || null;
+    this._buildControlOverlay();
+  },
+
+  _closeControlOverlay() {
+    this._activeControlZoneId = null;
+    this._activeControlAnchorName = null;
+    // Cancel any pending debounced volume-set calls — clearing the Map alone drops our
+    // reference to the timer IDs without canceling them, so an in-flight command would
+    // still fire and reach the speaker after the overlay is gone.
+    if (this._controlVolumeDebounceTimer) {
+      clearTimeout(this._controlVolumeDebounceTimer);
+      this._controlVolumeDebounceTimer = null;
+    }
+    this._controlMemberVolumeDebounceTimers.forEach((timer) => clearTimeout(timer));
+    this._controlMemberVolumeDebounceTimers.clear();
+    this._clearFavoritePending({ rerender: false });
+    this._closeSpeakersOverlay();
+    if (this._controlOverlayEl) {
+      this._controlOverlayEl.remove();
+      this._controlOverlayEl = null;
+    }
+  },
+
+  _debounceSetVolume(zoneId, volume) {
+    if (this._controlVolumeDebounceTimer) {
+      clearTimeout(this._controlVolumeDebounceTimer);
+    }
+    this._controlVolumeDebounceTimer = setTimeout(() => {
+      this._controlVolumeDebounceTimer = null;
+      this.sendSocketNotification('SONOS_CONTROL_SET_VOLUME', { zoneId, volume });
+    }, 150);
+  },
+
+  _debounceSetMemberVolume(zoneId, memberName, volume) {
+    if (this._controlMemberVolumeDebounceTimers.has(memberName)) {
+      clearTimeout(this._controlMemberVolumeDebounceTimers.get(memberName));
+    }
+    const timer = setTimeout(() => {
+      this._controlMemberVolumeDebounceTimers.delete(memberName);
+      this.sendSocketNotification('SONOS_CONTROL_SET_MEMBER_VOLUME', { zoneId, memberName, volume });
+    }, 150);
+    this._controlMemberVolumeDebounceTimers.set(memberName, timer);
+  },
+
+  _buildControlOverlay() {
+    if (this._controlOverlayEl) {
+      this._controlOverlayEl.remove();
+      this._controlOverlayEl = null;
+    }
+
+    const group = this._locateActiveGroup();
+    if (!group) {
+      this._activeControlZoneId = null;
+      this._activeControlAnchorName = null;
+      return;
+    }
+
+    const speakersBtn = document.createElement('button');
+    speakersBtn.type = 'button';
+    speakersBtn.className = 'mmm-sonos__overlay-speakers-btn';
+    speakersBtn.innerText = this.translate('SPEAKERS');
+    speakersBtn.setAttribute('aria-label', this.translate('SPEAKERS'));
+    speakersBtn.addEventListener('click', () => this._openSpeakersOverlay());
+
+    const { backdrop, sheet } = this._buildOverlayShell(
+      group.name || '',
+      () => this._closeControlOverlay(),
+      [speakersBtn]
+    );
+
+    const errorEl = document.createElement('div');
+    errorEl.className = 'mmm-sonos__overlay-error';
+    errorEl.hidden = true;
+    sheet.appendChild(errorEl);
+
+    const isPlaying = ['playing', 'transitioning', 'buffering'].includes((group.playbackState || '').toLowerCase());
+    const playPauseBtn = document.createElement('button');
+    playPauseBtn.type = 'button';
+    playPauseBtn.className = 'mmm-sonos__overlay-playpause';
+    playPauseBtn.innerText = isPlaying ? '⏸' : '▶';
+    playPauseBtn.dataset.isPlaying = String(isPlaying);
+    playPauseBtn.addEventListener('click', () => {
+      const wasPlaying = playPauseBtn.dataset.isPlaying === 'true';
+      const notification = wasPlaying ? 'SONOS_CONTROL_PAUSE' : 'SONOS_CONTROL_PLAY';
+      // Optimistically flip the icon immediately — same pattern as the volume slider's
+      // instant local update — so the button doesn't feel unresponsive while waiting
+      // for the next SONOS_DATA tick to confirm. _syncControlOverlay() will correct
+      // this if the command failed or the real state differs.
+      const nowPlaying = !wasPlaying;
+      playPauseBtn.innerText = nowPlaying ? '⏸' : '▶';
+      playPauseBtn.dataset.isPlaying = String(nowPlaying);
+      // Use the live zone id, not the `group` captured when this button was built —
+      // a group/ungroup action can reassign the zone's id while the overlay stays
+      // open (see _locateActiveGroup), and this handler is never rebuilt, only synced.
+      this.sendSocketNotification(notification, { zoneId: this._activeControlZoneId });
+    });
+    sheet.appendChild(playPauseBtn);
+
+    const volumeRow = document.createElement('div');
+    volumeRow.className = 'mmm-sonos__overlay-volume';
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0';
+    slider.max = '100';
+    slider.step = String(this.config.controlVolumeStep || 5);
+    slider.value = String(group.volume ?? 0);
+    slider.className = 'mmm-sonos__overlay-volume-slider';
+    const volumeLabel = document.createElement('span');
+    volumeLabel.className = 'mmm-sonos__overlay-volume-label';
+    volumeLabel.innerText = `${slider.value}%`;
+    slider.addEventListener('input', () => {
+      volumeLabel.innerText = `${slider.value}%`;
+      // See the play/pause handler above — use the live zone id, not `group.id`.
+      this._debounceSetVolume(this._activeControlZoneId, Number(slider.value));
+    });
+    volumeRow.appendChild(slider);
+    volumeRow.appendChild(volumeLabel);
+    sheet.appendChild(volumeRow);
+
+    const memberVolumesSection = document.createElement('div');
+    memberVolumesSection.className = 'mmm-sonos__overlay-member-volumes';
+    sheet.appendChild(memberVolumesSection);
+    this._renderMemberVolumesSection(memberVolumesSection, group);
+
+    const favoritesList = document.createElement('div');
+    favoritesList.className = 'mmm-sonos__overlay-favorites';
+    sheet.appendChild(favoritesList);
+
+    document.body.appendChild(backdrop);
+    this._controlOverlayEl = backdrop;
+    this._renderedMemberNamesKey = (group.members || []).join('|');
+    this._renderControlOverlayFavorites();
+  },
+
+  // Builds the collapsed-by-default "▾ Per-speaker volume" section, only shown once a
+  // zone has more than one member — a single-speaker zone's own slider above already IS
+  // that speaker's volume.
+  _renderMemberVolumesSection(container, group) {
+    container.innerHTML = '';
+    if (!group.members || group.members.length <= 1) {
+      return;
+    }
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'mmm-sonos__overlay-member-volumes-toggle';
+    toggle.innerText = `▾ ${this.translate('PER_SPEAKER_VOLUME')}`;
+    toggle.setAttribute('aria-expanded', 'false');
+    const list = document.createElement('div');
+    list.className = 'mmm-sonos__overlay-member-volumes-list';
+    list.hidden = true;
+    toggle.addEventListener('click', () => {
+      const expanded = toggle.getAttribute('aria-expanded') === 'true';
+      toggle.setAttribute('aria-expanded', String(!expanded));
+      list.hidden = expanded;
+    });
+    container.appendChild(toggle);
+    container.appendChild(list);
+    this._renderMemberVolumeRows(list, group);
+  },
+
+  _renderMemberVolumeRows(list, group) {
+    list.innerHTML = '';
+    (group.memberDetails || []).forEach((member) => {
+      const row = document.createElement('div');
+      row.className = 'mmm-sonos__overlay-member-volume-row';
+      row.dataset.memberName = member.name;
+      const label = document.createElement('span');
+      label.className = 'mmm-sonos__overlay-member-volume-name';
+      label.innerText = member.name;
+      const slider = document.createElement('input');
+      slider.type = 'range';
+      slider.min = '0';
+      slider.max = '100';
+      slider.step = String(this.config.controlVolumeStep || 5);
+      slider.value = String(member.volume ?? 0);
+      slider.className = 'mmm-sonos__overlay-member-volume-slider';
+      const volumeLabel = document.createElement('span');
+      volumeLabel.className = 'mmm-sonos__overlay-member-volume-label';
+      volumeLabel.innerText = `${slider.value}%`;
+      slider.addEventListener('input', () => {
+        volumeLabel.innerText = `${slider.value}%`;
+        this._debounceSetMemberVolume(group.id, member.name, Number(slider.value));
+      });
+      row.appendChild(label);
+      row.appendChild(slider);
+      row.appendChild(volumeLabel);
+      list.appendChild(row);
+    });
+  },
+
+  _syncControlOverlay() {
+    const group = this._locateActiveGroup();
+    if (!group) {
+      this._showZoneUnavailableAndClose();
+      return;
+    }
+    if (!this._controlOverlayEl) {
+      return;
+    }
+
+    const title = this._controlOverlayEl.querySelector('.mmm-sonos__overlay-title');
+    if (title) {
+      title.innerText = group.name || '';
+    }
+
+    const playPauseBtn = this._controlOverlayEl.querySelector('.mmm-sonos__overlay-playpause');
+    if (playPauseBtn) {
+      const isPlaying = ['playing', 'transitioning', 'buffering'].includes((group.playbackState || '').toLowerCase());
+      playPauseBtn.innerText = isPlaying ? '⏸' : '▶';
+      playPauseBtn.dataset.isPlaying = String(isPlaying);
+    }
+
+    const slider = this._controlOverlayEl.querySelector('.mmm-sonos__overlay-volume-slider');
+    const volumeLabel = this._controlOverlayEl.querySelector('.mmm-sonos__overlay-volume-label');
+    if (slider && document.activeElement !== slider && group.volume != null) {
+      slider.value = String(group.volume);
+      if (volumeLabel) {
+        volumeLabel.innerText = `${group.volume}%`;
+      }
+    }
+
+    // Rebuild the per-speaker volume section only when the actual set of members changed
+    // (e.g. a group/ungroup action) — otherwise just refresh the existing sliders' values,
+    // same rationale as the favorites list below: don't yank an expanded section shut or
+    // reset scroll position on every routine poll tick.
+    const memberNamesKey = (group.members || []).join('|');
+    const memberVolumesSection = this._controlOverlayEl.querySelector('.mmm-sonos__overlay-member-volumes');
+    if (memberVolumesSection && memberNamesKey !== this._renderedMemberNamesKey) {
+      this._renderMemberVolumesSection(memberVolumesSection, group);
+      this._renderedMemberNamesKey = memberNamesKey;
+    } else {
+      (group.memberDetails || []).forEach((member) => {
+        const row = this._controlOverlayEl.querySelector(
+          `.mmm-sonos__overlay-member-volume-row[data-member-name="${CSS.escape(member.name)}"]`
+        );
+        if (!row) return;
+        const memberSlider = row.querySelector('.mmm-sonos__overlay-member-volume-slider');
+        const memberLabel = row.querySelector('.mmm-sonos__overlay-member-volume-label');
+        if (memberSlider && document.activeElement !== memberSlider && member.volume != null) {
+          memberSlider.value = String(member.volume);
+          if (memberLabel) {
+            memberLabel.innerText = `${member.volume}%`;
+          }
+        }
+      });
+    }
+
+    if (this._speakersOverlayEl) {
+      this._syncSpeakersOverlay();
+    }
+
+    // Only rebuild the favorites list when something that affects its rendered
+    // output actually changed — the favorites array itself, or which favorite
+    // is currently active (driven by the now-playing title). Rebuilding on every
+    // tick resets scroll position and can yank a button out from under a tap.
+    const favoritesChanged = this.favorites !== this._renderedFavoritesRef;
+    const activeTitleChanged = (group.title || null) !== this._renderedActiveTitle;
+    if (favoritesChanged || activeTitleChanged) {
+      this._renderControlOverlayFavorites();
+    }
+  },
+
+  _renderControlOverlayFavorites() {
+    if (!this._controlOverlayEl) {
+      return;
+    }
+    const list = this._controlOverlayEl.querySelector('.mmm-sonos__overlay-favorites');
+    if (!list) {
+      return;
+    }
+    list.innerHTML = '';
+
+    const group = this._findGroupById(this._activeControlZoneId);
+    const favorites = this._limitFavorites(this.favorites, this.config.maxFavorites);
+
+    // Track what we just rendered so _syncControlOverlay can skip redundant rebuilds
+    // (see _renderedFavoritesRef / _renderedActiveTitle).
+    this._renderedFavoritesRef = this.favorites;
+    this._renderedActiveTitle = group ? group.title : null;
+
+    if (!favorites.length) {
+      const empty = document.createElement('div');
+      empty.className = 'mmm-sonos__overlay-favorites-empty';
+      empty.innerText = this.translate('NO_FAVORITES');
+      list.appendChild(empty);
+      return;
+    }
+
+    favorites.forEach((favorite) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'mmm-sonos__overlay-favorite';
+      item.dataset.favoriteId = favorite.id;
+      const state = this._resolveFavoriteState(favorite, group?.title || null, this._pendingFavoriteId);
+      if (state === 'active') {
+        item.classList.add('mmm-sonos__overlay-favorite--active');
+        // The pending favorite just got confirmed — stop the pulse and drop the
+        // safety-net timer now instead of waiting for it to expire on its own.
+        if (favorite.id === this._pendingFavoriteId) {
+          this._clearFavoritePending({ rerender: false });
+        }
+      } else if (state === 'pending') {
+        item.classList.add('mmm-sonos__overlay-favorite--pending');
+      }
+      item.innerText = favorite.title;
+      item.addEventListener('click', () => {
+        this._setFavoritePending(favorite.id);
+        this.sendSocketNotification('SONOS_CONTROL_PLAY_FAVORITE', {
+          zoneId: this._activeControlZoneId,
+          favoriteId: favorite.id
+        });
+      });
+      list.appendChild(item);
+    });
+  },
+
+  _showZoneUnavailableAndClose() {
+    if (!this._controlOverlayEl) {
+      this._activeControlZoneId = null;
+      return;
+    }
+    const errorEl = this._controlOverlayEl.querySelector('.mmm-sonos__overlay-error');
+    if (errorEl) {
+      errorEl.hidden = false;
+      errorEl.innerText = this.translate('ZONE_UNAVAILABLE');
+    }
+    setTimeout(() => this._closeControlOverlay(), 1500);
+  },
+
+  _handleControlResult(payload) {
+    if (!this._controlOverlayEl || !payload || payload.zoneId !== this._activeControlZoneId) {
+      return;
+    }
+    if (payload.action === 'playFavorite' && !payload.success) {
+      this._clearFavoritePending();
+    }
+    const errorEl = this._controlOverlayEl.querySelector('.mmm-sonos__overlay-error');
+    if (!errorEl) {
+      return;
+    }
+    if (payload.success) {
+      errorEl.hidden = true;
+      errorEl.innerText = '';
+    } else {
+      errorEl.hidden = false;
+      const group = this._findGroupById(this._activeControlZoneId);
+      errorEl.innerText = `${this.translate('CONTROL_ERROR')}${group?.name ? ': ' + group.name : ''}`;
+    }
   },
 
   _resolveDisplayMode() {
@@ -887,7 +1699,7 @@ Module.register('MMM-Sonos', {
     return container;
   },
 
-  _renderProgress(position, duration, alignment) {
+  _renderProgress(position, duration, alignment, isPlaying) {
     if (position == null || duration == null || duration <= 0) {
       return null;
     }
@@ -917,6 +1729,7 @@ Module.register('MMM-Sonos', {
     bar.dataset.initialPosition = position;
     bar.dataset.duration = duration;
     bar.dataset.timestamp = this.lastUpdated || Date.now();
+    bar.dataset.isPlaying = String(Boolean(isPlaying));
 
     const percentage = Math.min(100, Math.max(0, (position / duration) * 100));
     bar.style.width = `${percentage}%`;
@@ -929,6 +1742,7 @@ Module.register('MMM-Sonos', {
     timeInfo.dataset.initialPosition = position;
     timeInfo.dataset.duration = duration;
     timeInfo.dataset.timestamp = this.lastUpdated || Date.now();
+    timeInfo.dataset.isPlaying = String(Boolean(isPlaying));
     timeInfo.innerText = `${this._formatTime(position)} / ${this._formatTime(duration)}`;
     container.appendChild(timeInfo);
 
@@ -1056,9 +1870,16 @@ Module.register('MMM-Sonos', {
     const initialPosition = parseFloat(dataset.initialPosition);
     const duration = parseFloat(dataset.duration);
     const timestamp = parseFloat(dataset.timestamp);
+    const isPlaying = dataset.isPlaying === 'true';
 
     if (isNaN(initialPosition) || isNaN(duration) || isNaN(timestamp) || duration <= 0) {
       return null;
+    }
+
+    // While paused/stopped, the position doesn't move — extrapolating it forward
+    // by elapsed wall-clock time would make a paused track appear to keep playing.
+    if (!isPlaying) {
+      return { initialPosition, duration, timestamp, elapsed: 0, currentPosition: initialPosition };
     }
 
     // Calculate elapsed time since the last update
@@ -1517,7 +2338,7 @@ Module.register('MMM-Sonos', {
 
     // Progress bar
     if (this.config.showProgress && group.duration != null && group.duration > 0) {
-      const progressEl = this._renderProgress(group.position ?? 0, group.duration, 'center');
+      const progressEl = this._renderProgress(group.position ?? 0, group.duration, 'center', isPlaying);
       if (progressEl) content.appendChild(progressEl);
     }
 
@@ -1565,6 +2386,7 @@ Module.register('MMM-Sonos', {
 
       // Treat null position (track at 0:00:00) as 0
       const safePosition = group.position ?? 0;
+      const isPlaying = ['playing', 'transitioning', 'buffering'].includes((group.playbackState || '').toLowerCase());
 
       const progressBar = groupElement.querySelector('.mmm-sonos__progress-bar');
       const timeDisplay = groupElement.querySelector('.mmm-sonos__progress-time');
@@ -1573,12 +2395,14 @@ Module.register('MMM-Sonos', {
         progressBar.dataset.initialPosition = safePosition;
         progressBar.dataset.duration = group.duration;
         progressBar.dataset.timestamp = newTimestamp;
+        progressBar.dataset.isPlaying = String(isPlaying);
       }
 
       if (timeDisplay) {
         timeDisplay.dataset.initialPosition = safePosition;
         timeDisplay.dataset.duration = group.duration;
         timeDisplay.dataset.timestamp = newTimestamp;
+        timeDisplay.dataset.isPlaying = String(isPlaying);
       }
     });
   },

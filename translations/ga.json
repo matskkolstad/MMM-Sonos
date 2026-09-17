@@ -17,5 +17,8 @@
   "SOURCE_LINE_IN": "Ionchur líne",
   "SOURCE_UNKNOWN": "Anaithnid",
   "VOLUME": "Toirt",
-  "SOURCE_APPLE_MUSIC": "Apple Music"
+  "SOURCE_APPLE_MUSIC": "Apple Music",
+  "SONOS_CONTROL": "Sonos",
+  "NOW_PLAYING": "Ag Seinm Anois",
+  "MORE_SPEAKERS": "Tuilleadh cainteoirí"
 }

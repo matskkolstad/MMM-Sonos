@@ -17,5 +17,8 @@
   "SOURCE_LINE_IN": "라인 입력",
   "SOURCE_UNKNOWN": "알 수 없음",
   "VOLUME": "볼륨",
-  "SOURCE_APPLE_MUSIC": "Apple Music"
+  "SOURCE_APPLE_MUSIC": "Apple Music",
+  "SONOS_CONTROL": "Sonos",
+  "NOW_PLAYING": "재생 중",
+  "MORE_SPEAKERS": "다른 스피커"
 }

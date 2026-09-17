@@ -17,5 +17,8 @@
   "SOURCE_LINE_IN": "Entrada de línia",
   "SOURCE_UNKNOWN": "Desconegut",
   "VOLUME": "Volum",
-  "SOURCE_APPLE_MUSIC": "Apple Music"
+  "SOURCE_APPLE_MUSIC": "Apple Music",
+  "SONOS_CONTROL": "Sonos",
+  "NOW_PLAYING": "Reproduint ara",
+  "MORE_SPEAKERS": "Més altaveus"
 }

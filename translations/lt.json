@@ -17,5 +17,8 @@
   "SOURCE_LINE_IN": "Linijos įvestis",
   "SOURCE_UNKNOWN": "Nežinomas",
   "VOLUME": "Garsumas",
-  "SOURCE_APPLE_MUSIC": "Apple Music"
+  "SOURCE_APPLE_MUSIC": "Apple Music",
+  "SONOS_CONTROL": "Sonos",
+  "NOW_PLAYING": "Dabar grojama",
+  "MORE_SPEAKERS": "Daugiau garsiakalbių"
 }

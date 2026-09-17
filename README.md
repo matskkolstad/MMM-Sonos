@@ -23,6 +23,7 @@ A MagicMirror² module that automatically discovers your Sonos zones and shows w
 - 🔠 Adjust text size, album art size, max groups, and module width via config.
 - 🧭 Control alignment without extra CSS – choose left, center, right, or distributed spacing.
 - 🕒 Show the last update time and optionally hide the module when nothing is playing.
+- 👆 Touch control mode – tap a card to play/pause, adjust group volume, and browse/play your Sonos favorites directly from the mirror.
 
 ## Disclaimer
 
@@ -183,7 +184,14 @@ An example showing all available configuration options:
     tvIconText: 'TV',                // Text to use when tvIconMode is 'text'
     tvIconSvgPath: null,             // Path/URL to SVG when tvIconMode is 'svg' (defaults to bundled asset)
     tvLabel: null,                   // Override TV badge text (defaults to translated "TV")
-    
+
+    // Touch control mode
+    enableControls: false,           // Turn cards into a tappable play/pause/volume/favorites control surface
+    controlShowIdleZones: true,      // false = only show playing zones; idle ones reachable via the "+" button
+    favoritesRefreshInterval: 300000,// How often (ms) the favorites list is re-fetched from Sonos
+    maxFavorites: 12,                // Max favorites shown in the overlay before it scrolls
+    controlVolumeStep: 5,            // Step size of the volume slider in the control overlay
+
     // Debugging
     debug: false                     // Enable detailed logging
   }
@@ -263,6 +271,11 @@ Restart MagicMirror² afterwards to load the latest code.
 | `tvIconText` | `'TV'` | Text shown when `tvIconMode` is `'text'`. Scales with `albumArtSize`. |
 | `tvIconSvgPath` | `null` | Path or URL to an SVG used when `tvIconMode` is `'svg'`. If `null`, a bundled `assets/tv-default.svg` is used. |
 | `tvLabel` | `null` | Override the text label for the TV badge (defaults to the translated "TV"). |
+| `enableControls` | `false` | Master switch for touch control mode. |
+| `controlShowIdleZones` | `true` | When `true`, every zone is always shown in control mode (idle ones get a "Nothing playing" card). When `false`, only playing zones are shown, matching normal mode — idle zones are reached via the "+" more-speakers button. |
+| `favoritesRefreshInterval` | `300000` | How often (ms) the favorites list is re-fetched from Sonos. |
+| `maxFavorites` | `12` | Maximum number of favorites shown in the overlay before it scrolls. |
+| `controlVolumeStep` | `5` | Step size of the volume slider in the control overlay. |
 | `debug` | `false` | Log extra information to the MagicMirror console. |
 
 ### TV icon choices
@@ -362,6 +375,108 @@ Use `fullscreenSpeaker` to pin the card to a specific speaker. The value can be 
 | `fullscreenSpeaker` | `null` | Speaker/group to show. Accepts a speaker name, group name, group ID, or coordinator IP. When `null`, the first currently-playing group is used. |
 | `fullscreenAlbumArtSize` | `300` | Album art size in pixels. |
 | `fullscreenWidth` | `null` | Set a maximum width for the fullscreen card (e.g. `600` or `'600px'`). |
+
+### Touch control mode
+
+Setting `enableControls: true` turns MMM-Sonos from a pure display into a
+tappable control surface, for use on a touch-screen (or any mirror you're
+willing to touch). It only changes behavior in `row` and `grid`
+`displayMode` — `mini` and `fullscreen` are unaffected.
+
+```javascript
+{
+  module: 'MMM-Sonos',
+  position: 'bottom_left',
+  config: {
+    displayMode: 'row',
+    enableControls: true,
+    controlShowIdleZones: true,       // false = only show playing zones; reach idle ones via the "+" button
+    favoritesRefreshInterval: 300000, // how often the favorites list is re-fetched (ms)
+    maxFavorites: 12,                 // max favorites shown before the list scrolls
+    controlVolumeStep: 5              // slider step size
+  }
+}
+```
+
+With `enableControls: true`:
+
+- By default (`controlShowIdleZones: true`), every zone on the network is
+  shown, not just ones currently playing — idle speakers get a simple
+  "Nothing playing" card instead of being hidden (`hideWhenNothingPlaying`
+  and `showWhenPaused` no longer apply).
+- Set `controlShowIdleZones: false` to only show zones that are actually
+  playing, just like normal (non-control) mode. Idle zones are then reached
+  through a small "+" button that appears in the corner of the module —
+  tapping it lists the hidden zones so you can open one and start playback
+  there.
+- Tapping any visible card (playing or idle) opens a control overlay with
+  play/pause, a volume slider, and a list of your Sonos favorites.
+- The volume slider controls the whole group together: every speaker in
+  that group is set to the same volume level, not just the coordinator.
+- Once a zone has more than one speaker, a collapsed "▾ Per-speaker volume"
+  section appears below the group slider with one slider per member, for
+  adjusting a single speaker without moving the rest of the group.
+- A "Speakers" button in the overlay header opens a picker for changing
+  group membership: pick another zone to merge every one of its speakers
+  into the one you're viewing, or tap "Remove" next to a member to split
+  it back out into its own standalone zone. The picker stays open after
+  each tap (each row briefly disables itself mid-request) so you can pull
+  in several zones, or remove several members, in one sitting.
+- Favorites come directly from what you've saved in the Sonos app
+  (via Sonos' own favorites list) — there is no separate config-defined
+  station list to maintain.
+- If you leave the module's `header` config unset, MMM-Sonos picks a
+  heading that matches what's actually on screen: "Sonos" when idle zones
+  are shown alongside playing ones, or "Now Playing" when
+  `controlShowIdleZones: false` limits the view to zones that are actually
+  playing. A `header` you set yourself is always used as-is.
+
+#### Screenshots
+
+**Idle zone card:**
+
+<img width="877" height="462" alt="Touch control mode - idle zone card" src="https://github.com/user-attachments/assets/dcfb449a-d50f-43ce-b934-5206cded1fa9" />
+
+**Control overlay (play/pause, volume):**
+
+<img width="781" height="805" alt="Touch control mode - control overlay" src="https://github.com/user-attachments/assets/cbdf7528-bacb-40fb-a39f-9e317973b2a7" />
+
+**Favorites list:**
+
+<img width="802" height="771" alt="Touch control mode - favorites list" src="https://github.com/user-attachments/assets/19a30291-2202-4eb3-86b6-af6714acae4b" />
+
+**"+" more-speakers button (`controlShowIdleZones: false`, idle zones hidden):**
+
+<img width="455" height="432" alt="Touch control mode - more speakers button" src="https://github.com/user-attachments/assets/7a92e10c-cd63-4662-97de-d828c29ed312" />
+
+**More speakers list (tapping the "+" button):**
+
+<img width="867" height="365" alt="Touch control mode - more speakers list" src="https://github.com/user-attachments/assets/f2135836-1612-47ad-9c36-9cb5076d217d" />
+
+
+**Touch control mode option reference:**
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `enableControls` | `false` | Master switch for touch control mode. |
+| `controlShowIdleZones` | `true` | When `true`, every zone is always shown (idle ones get a "Nothing playing" card). When `false`, only playing zones are shown, matching normal mode — idle zones are reached via the "+" more-speakers button. |
+| `favoritesRefreshInterval` | `300000` | How often (ms) the favorites list is re-fetched from Sonos. |
+| `maxFavorites` | `12` | Maximum number of favorites shown in the overlay before it scrolls. |
+| `controlVolumeStep` | `5` | Step size of the volume slider in the control overlay. |
+
+#### Known limitations
+
+- `maxGroups` (default `6`) still caps how many zones are shown in control
+  mode too — a household with more than `maxGroups` zones will have some
+  zones missing from the control surface entirely, with no indication.
+  Raise `maxGroups` if you have more zones than that and want them all
+  controllable.
+- Combining `enableControls: true` with `displayMode: 'fullscreen'`, or
+  running a second `MMM-Sonos` instance alongside a control-mode instance,
+  isn't fully supported yet — fullscreen's zone-selection logic doesn't yet
+  account for control mode's widened zone set, so it can end up showing
+  "nothing visible" while music is actually playing on another zone. Stick
+  to `row`/`grid` for the control-mode instance for now.
 
 ## Additional features
 
@@ -491,10 +606,18 @@ This module uses dependency overrides to mitigate known security vulnerabilities
 
 Some ideas for future improvements:
 
-- Add volume control through touch or remote notifications.
+- ~~Add volume control through touch or remote notifications.~~ ✅ **Completed**
 - ~~Show the playback source (Spotify, Radio, Line-in) with an icon.~~ ✅ **Completed**
 - ~~Include a simple progress indicator for the current track.~~ ✅ **Completed**
 - ~~Cache album art locally for faster loading on slower networks.~~ ✅ **Completed**
+- ~~Adjust volume on individual speakers in a group, in addition to group volume.~~ ✅ **Completed**
+- ~~Possibility to group and ungroup speakers.~~ ✅ **Completed**
+- Skip to the next/previous track directly from the control overlay, not just play/pause.
+- Add a sleep timer — automatically pause playback after N minutes.
+- Add a mute button per speaker, in addition to the volume slider.
+- Make `enableControls` work correctly with `displayMode: 'fullscreen'` (today it can show "nothing playing" even when music is playing on another zone).
+- Don't let `maxGroups` silently limit the control surface the way it limits the passive display.
+- Show a small icon per favorite indicating its type (radio, playlist, stream).
 
 ## License
 
