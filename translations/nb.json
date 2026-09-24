@@ -23,7 +23,13 @@
   "NO_FAVORITES": "Ingen favoritter funnet — legg til i Sonos-appen",
   "CONTROL_ERROR": "Fikk ikke kontakt med høyttaler",
   "ZONE_UNAVAILABLE": "Denne høyttaleren er ikke lenger tilgjengelig",
-  "SONOS_CONTROL": "Sonos",
-  "NOW_PLAYING": "Spiller nå",
-  "MORE_SPEAKERS": "Flere høyttalere"
+  "MORE_SPEAKERS": "Flere høyttalere",
+  "SPEAKERS": "Høyttalere",
+  "PER_SPEAKER_VOLUME": "Volum per høyttaler",
+  "CURRENT_GROUP": "Nåværende gruppe",
+  "REMOVE": "Fjern",
+  "JOIN_SPEAKER": "Legg til høyttaler/gruppe",
+  "NO_OTHER_SPEAKERS": "Fant ingen andre høyttalere",
+  "PLAY": "Spill av",
+  "PAUSE": "Pause"
 }

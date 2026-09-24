@@ -255,25 +255,11 @@ Module.register('MMM-Sonos', {
     ];
   },
 
-  // Only supplies an automatic header when the user hasn't set their own `header`
-  // in config — an explicit header is always respected as-is. In touch control
-  // mode, "Now Playing" style config headers become misleading once idle zones
-  // are shown alongside playing ones, so we pick text that matches what's
-  // actually on screen.
-  getHeader() {
-    if (this.data.header) {
-      return this.data.header;
-    }
-    if (this.config.enableControls) {
-      return this.config.controlShowIdleZones
-        ? this.translate('SONOS_CONTROL')
-        : this.translate('NOW_PLAYING');
-    }
-    return this.data.header;
-  },
-
   getTranslations() {
+    // MagicMirror falls back to the FIRST language listed here for keys a
+    // translation lacks, so English must come first.
     return {
+      en: 'translations/en.json',
       af: 'translations/af.json',
       ar: 'translations/ar.json',
       bg: 'translations/bg.json',
@@ -284,7 +270,6 @@ Module.register('MMM-Sonos', {
       da: 'translations/da.json',
       de: 'translations/de.json',
       el: 'translations/el.json',
-      en: 'translations/en.json',
       es: 'translations/es.json',
       et: 'translations/et.json',
       fi: 'translations/fi.json',
@@ -473,7 +458,15 @@ Module.register('MMM-Sonos', {
   // this only builds the shared shell, not the overlay's specific content.
   _buildOverlayShell(titleText, onClose, extraHeaderButtons = []) {
     const backdrop = document.createElement('div');
-    backdrop.className = 'mmm-sonos__overlay-backdrop';
+    backdrop.className = 'mmm-sonos-overlay mmm-sonos__overlay-backdrop';
+    // Overlays are attached to <body>, outside the module wrapper, so carry over the
+    // module's text scaling explicitly.
+    const textSize = this._coercePixelValue(this.config.textSize, null);
+    if (textSize) {
+      backdrop.style.setProperty('--mmm-sonos-text-size', textSize);
+    } else {
+      backdrop.style.setProperty('--mmm-sonos-font-scale', this.config.fontScale);
+    }
     backdrop.dataset.moduleId = this.identifier;
     backdrop.addEventListener('click', (event) => {
       if (event.target === backdrop) {
@@ -494,7 +487,7 @@ Module.register('MMM-Sonos', {
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
     closeBtn.className = 'mmm-sonos__overlay-close';
-    closeBtn.innerText = '×';
+    closeBtn.innerHTML = this._iconSvg('close');
     closeBtn.setAttribute('aria-label', this.translate('CLOSE'));
     closeBtn.addEventListener('click', () => onClose());
     header.appendChild(closeBtn);
@@ -568,6 +561,7 @@ Module.register('MMM-Sonos', {
       this._speakersOverlayEl.remove();
       this._speakersOverlayEl = null;
     }
+    this._controlOverlayEl?.classList.remove('mmm-sonos-overlay--covered');
   },
 
   _buildSpeakersOverlay() {
@@ -595,6 +589,8 @@ Module.register('MMM-Sonos', {
 
     document.body.appendChild(backdrop);
     this._speakersOverlayEl = backdrop;
+    // Hide the control sheet underneath so only one sheet is visible at a time.
+    this._controlOverlayEl?.classList.add('mmm-sonos-overlay--covered');
 
     this._renderSpeakersOverlayContent();
   },
@@ -864,10 +860,7 @@ Module.register('MMM-Sonos', {
         idleWrapper.style.width = sizeValue;
         idleWrapper.style.height = sizeValue;
       }
-      idleWrapper.innerText = '🔇';
-      if (iconFontSize) {
-        idleWrapper.style.fontSize = iconFontSize;
-      }
+      idleWrapper.innerHTML = this._iconSvg('speaker');
       container.appendChild(idleWrapper);
     }
 
@@ -1041,6 +1034,32 @@ Module.register('MMM-Sonos', {
     return ts;
   },
 
+  // Monochrome inline icons (the module avoids emoji so it looks the same everywhere).
+  _iconSvg(name) {
+    const paths = {
+      play: '<path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/>',
+      pause: '<path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill="currentColor"/>',
+      close: '<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+      speaker: '<path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>' +
+        '<path d="M15.5 9.5a3.5 3.5 0 0 1 0 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'
+    };
+    return `<svg class="mmm-sonos__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${paths[name] || ''}</svg>`;
+  },
+
+  _setPlayPauseIcon(button, isPlaying) {
+    button.innerHTML = this._iconSvg(isPlaying ? 'pause' : 'play');
+    button.dataset.isPlaying = String(isPlaying);
+    button.setAttribute('aria-label', this.translate(isPlaying ? 'PAUSE' : 'PLAY'));
+  },
+
+  // Colours the part of a volume slider's track left of the thumb, like the progress bar.
+  _updateSliderFill(slider) {
+    const min = Number(slider.min) || 0;
+    const max = Number(slider.max) || 100;
+    const percent = ((Number(slider.value) - min) / (max - min)) * 100;
+    slider.style.setProperty('--mmm-sonos-fill', `${Math.min(100, Math.max(0, percent))}%`);
+  },
+
   _limitFavorites(favorites, maxFavorites) {
     const list = favorites || [];
     if (!maxFavorites || maxFavorites <= 0) return list;
@@ -1200,8 +1219,7 @@ Module.register('MMM-Sonos', {
     const playPauseBtn = document.createElement('button');
     playPauseBtn.type = 'button';
     playPauseBtn.className = 'mmm-sonos__overlay-playpause';
-    playPauseBtn.innerText = isPlaying ? '⏸' : '▶';
-    playPauseBtn.dataset.isPlaying = String(isPlaying);
+    this._setPlayPauseIcon(playPauseBtn, isPlaying);
     playPauseBtn.addEventListener('click', () => {
       const wasPlaying = playPauseBtn.dataset.isPlaying === 'true';
       const notification = wasPlaying ? 'SONOS_CONTROL_PAUSE' : 'SONOS_CONTROL_PLAY';
@@ -1210,8 +1228,7 @@ Module.register('MMM-Sonos', {
       // for the next SONOS_DATA tick to confirm. _syncControlOverlay() will correct
       // this if the command failed or the real state differs.
       const nowPlaying = !wasPlaying;
-      playPauseBtn.innerText = nowPlaying ? '⏸' : '▶';
-      playPauseBtn.dataset.isPlaying = String(nowPlaying);
+      this._setPlayPauseIcon(playPauseBtn, nowPlaying);
       // Use the live zone id, not the `group` captured when this button was built —
       // a group/ungroup action can reassign the zone's id while the overlay stays
       // open (see _locateActiveGroup), and this handler is never rebuilt, only synced.
@@ -1228,11 +1245,13 @@ Module.register('MMM-Sonos', {
     slider.step = String(this.config.controlVolumeStep || 5);
     slider.value = String(group.volume ?? 0);
     slider.className = 'mmm-sonos__overlay-volume-slider';
+    this._updateSliderFill(slider);
     const volumeLabel = document.createElement('span');
     volumeLabel.className = 'mmm-sonos__overlay-volume-label';
     volumeLabel.innerText = `${slider.value}%`;
     slider.addEventListener('input', () => {
       volumeLabel.innerText = `${slider.value}%`;
+      this._updateSliderFill(slider);
       // See the play/pause handler above — use the live zone id, not `group.id`.
       this._debounceSetVolume(this._activeControlZoneId, Number(slider.value));
     });
@@ -1297,11 +1316,13 @@ Module.register('MMM-Sonos', {
       slider.step = String(this.config.controlVolumeStep || 5);
       slider.value = String(member.volume ?? 0);
       slider.className = 'mmm-sonos__overlay-member-volume-slider';
+      this._updateSliderFill(slider);
       const volumeLabel = document.createElement('span');
       volumeLabel.className = 'mmm-sonos__overlay-member-volume-label';
       volumeLabel.innerText = `${slider.value}%`;
       slider.addEventListener('input', () => {
         volumeLabel.innerText = `${slider.value}%`;
+        this._updateSliderFill(slider);
         this._debounceSetMemberVolume(group.id, member.name, Number(slider.value));
       });
       row.appendChild(label);
@@ -1329,14 +1350,14 @@ Module.register('MMM-Sonos', {
     const playPauseBtn = this._controlOverlayEl.querySelector('.mmm-sonos__overlay-playpause');
     if (playPauseBtn) {
       const isPlaying = ['playing', 'transitioning', 'buffering'].includes((group.playbackState || '').toLowerCase());
-      playPauseBtn.innerText = isPlaying ? '⏸' : '▶';
-      playPauseBtn.dataset.isPlaying = String(isPlaying);
+      this._setPlayPauseIcon(playPauseBtn, isPlaying);
     }
 
     const slider = this._controlOverlayEl.querySelector('.mmm-sonos__overlay-volume-slider');
     const volumeLabel = this._controlOverlayEl.querySelector('.mmm-sonos__overlay-volume-label');
     if (slider && document.activeElement !== slider && group.volume != null) {
       slider.value = String(group.volume);
+      this._updateSliderFill(slider);
       if (volumeLabel) {
         volumeLabel.innerText = `${group.volume}%`;
       }
@@ -1361,6 +1382,7 @@ Module.register('MMM-Sonos', {
         const memberLabel = row.querySelector('.mmm-sonos__overlay-member-volume-label');
         if (memberSlider && document.activeElement !== memberSlider && member.volume != null) {
           memberSlider.value = String(member.volume);
+          this._updateSliderFill(memberSlider);
           if (memberLabel) {
             memberLabel.innerText = `${member.volume}%`;
           }
