@@ -17,5 +17,19 @@
   "SOURCE_LINE_IN": "Line-in",
   "SOURCE_UNKNOWN": "Ukjent",
   "VOLUME": "Volum",
-  "SOURCE_APPLE_MUSIC": "Apple Music"
+  "SOURCE_APPLE_MUSIC": "Apple Music",
+  "IDLE_LABEL": "Ingenting spilles",
+  "CLOSE": "Lukk",
+  "NO_FAVORITES": "Ingen favoritter funnet — legg til i Sonos-appen",
+  "CONTROL_ERROR": "Kunne ikke utføre handlingen",
+  "ZONE_UNAVAILABLE": "Denne høyttaleren er ikke lenger tilgjengelig",
+  "MORE_SPEAKERS": "Flere høyttalere",
+  "SPEAKERS": "Høyttalere",
+  "PER_SPEAKER_VOLUME": "Volum per høyttaler",
+  "CURRENT_GROUP": "Nåværende gruppe",
+  "REMOVE": "Fjern",
+  "JOIN_SPEAKER": "Legg til høyttaler/gruppe",
+  "NO_OTHER_SPEAKERS": "Fant ingen andre høyttalere",
+  "PLAY": "Spill av",
+  "PAUSE": "Pause"
 }

@@ -14,3 +14,4 @@ test-demo.html
 cache/
 .e2e/
 test/e2e/output/
+.superpowers/

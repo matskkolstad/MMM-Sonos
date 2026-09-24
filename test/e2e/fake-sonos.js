@@ -12,6 +12,12 @@
  *   GET /xml/device_description.xml
  *   GET /art/<name>.png   (album art, generated on the fly)
  *
+ * and the control actions used by touch control mode (enableControls):
+ *   Play, Pause, SetVolume, SetAVTransportURI (favorites and x-rincon: joins),
+ *   BecomeCoordinatorOfStandaloneGroup (leave group), Browse FV:2 (favorites),
+ *   RemoveAllTracksFromQueue, AddURIToQueue and playing from the queue.
+ * Control actions change the simulated state, just like on real speakers.
+ *
  * The responses mirror the XML a real Sonos speaker returns, so node_helper.js
  * and the sonos package run unmodified against it.
  *
@@ -58,6 +64,18 @@ const ART_COLORS = {
   orange: [[190, 80, 10], [250, 200, 90]],
   teal: [[10, 90, 100], [110, 210, 200]]
 };
+
+// UPnP error reply, as a speaker sends when it rejects an action (e.g. 714 = illegal MIME type)
+function fault(res, code) {
+  res.writeHead(500, { 'Content-Type': 'text/xml; charset="utf-8"' });
+  res.end(
+    '<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><s:Fault>' +
+      '<faultcode>s:Client</faultcode><faultstring>UPnPError</faultstring><detail>' +
+      `<UPnPError xmlns="urn:schemas-upnp-org:control-1-0"><errorCode>${code}</errorCode></UPnPError>` +
+      '</detail></s:Fault></s:Body></s:Envelope>'
+  );
+  return undefined;
+}
 
 function escapeXml(value) {
   return String(value)
@@ -146,8 +164,90 @@ class FakeSonos {
   }
 
   setScenario(scenario) {
-    this.scenario = scenario;
+    // Control actions change the state, so work on a copy.
+    this.scenario = JSON.parse(JSON.stringify(scenario));
+    this.scenario.groups = this.scenario.groups || [];
     this.scenarioStartedAt = Date.now();
+    // Volume is per speaker on Sonos; a group's volume initialises all its members.
+    this.volumes = new Map();
+    this.queues = new Map(); // speaker uuid -> queued tracks
+    for (const group of this.scenario.groups) {
+      for (const uuid of group.members?.length ? group.members : [group.coordinator]) {
+        this.volumes.set(uuid, group.volume ?? 20);
+      }
+    }
+  }
+
+  groupContaining(uuid) {
+    return this.scenario.groups.find((g) => (g.members?.length ? g.members : [g.coordinator]).includes(uuid)) || null;
+  }
+
+  // Remove a speaker from the group it is in. If it coordinated a group with other
+  // members, the next member takes over (as on a real system).
+  detachSpeaker(uuid) {
+    const group = this.groupContaining(uuid);
+    if (!group) {
+      return;
+    }
+    const members = (group.members?.length ? group.members : [group.coordinator]).filter((m) => m !== uuid);
+    if (!members.length) {
+      this.scenario.groups = this.scenario.groups.filter((g) => g !== group);
+      return;
+    }
+    group.members = members;
+    if (group.coordinator === uuid) {
+      group.coordinator = members[0];
+    }
+  }
+
+  // Coordinator group for a speaker, creating an idle standalone group if needed.
+  ensureOwnGroup(uuid) {
+    let group = this.groupForCoordinator(uuid);
+    if (!group) {
+      this.detachSpeaker(uuid);
+      group = { coordinator: uuid, members: [uuid], state: 'stopped' };
+      this.scenario.groups.push(group);
+    }
+    return group;
+  }
+
+  // The metadata Sonos stores with a favorite (<r:resMD>), which it needs to play it.
+  static favoriteResMD(fav) {
+    const upnpClass = fav.container ? 'object.container.playlistContainer' : 'object.item.audioItem.audioBroadcast';
+    return (
+      '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" ' +
+      'xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">' +
+      `<item id="${escapeXml(fav.itemId || 'F00092020s24896')}" parentID="-1" restricted="true">` +
+      `<dc:title>${escapeXml(fav.title)}</dc:title><upnp:class>${upnpClass}</upnp:class>` +
+      '<desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON65031_</desc>' +
+      '</item></DIDL-Lite>'
+    );
+  }
+
+  favoritesXml() {
+    const items = (this.scenario.favorites || []).map((fav, index) =>
+      `<item id="FV:2/${index + 1}" parentID="FV:2" restricted="false">` +
+      `<dc:title>${escapeXml(fav.title)}</dc:title>` +
+      '<upnp:class>object.itemobject.item.sonos-favorite</upnp:class>' +
+      (fav.art ? `<upnp:albumArtURI>${escapeXml(artPath(fav.art))}</upnp:albumArtURI>` : '') +
+      `<res protocolInfo="x-rincon-cpcontainer:*:*:*">${escapeXml(fav.uri)}</res>` +
+      `<r:resMD>${escapeXml(FakeSonos.favoriteResMD(fav))}</r:resMD>` +
+      '</item>'
+    );
+    return (
+      '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" ' +
+      'xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">' +
+      items.join('') +
+      '</DIDL-Lite>'
+    );
+  }
+
+  static soapValue(body, tag) {
+    const match = body.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
+    if (!match) {
+      return null;
+    }
+    return match[1].replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
   }
 
   speakerByPort(port) {
@@ -284,7 +384,117 @@ class FakeSonos {
       }
 
       case 'GetVolume':
-        return reply(`<CurrentVolume>${group?.volume ?? 20}</CurrentVolume>`);
+        return reply(`<CurrentVolume>${this.volumes.get(speaker.uuid) ?? 20}</CurrentVolume>`);
+
+      // ---- control actions (touch control mode) ----
+      case 'SetVolume':
+        this.volumes.set(speaker.uuid, Number(FakeSonos.soapValue(body, 'DesiredVolume')));
+        return reply('');
+
+      case 'Play':
+        if (group) {
+          if (group.state !== 'playing') {
+            this.scenarioStartedAt = Date.now();
+          }
+          group.state = 'playing';
+        }
+        return reply('');
+
+      case 'Pause':
+        if (group) {
+          group.state = 'paused';
+        }
+        return reply('');
+
+      case 'BecomeCoordinatorOfStandaloneGroup':
+        this.detachSpeaker(speaker.uuid);
+        return reply('<DelegatedGroupCoordinatorID></DelegatedGroupCoordinatorID><NewGroupID></NewGroupID>');
+
+      case 'SetAVTransportURI': {
+        const uri = FakeSonos.soapValue(body, 'CurrentURI') || '';
+        if (uri.startsWith('x-rincon:')) {
+          // Join the group coordinated by the given speaker
+          const target = this.groupForCoordinator(uri.slice('x-rincon:'.length));
+          if (!target) {
+            res.writeHead(500);
+            res.end('Unknown coordinator');
+            return undefined;
+          }
+          this.detachSpeaker(speaker.uuid);
+          target.members = [...(target.members?.length ? target.members : [target.coordinator]), speaker.uuid];
+          return reply('');
+        }
+        if (uri.startsWith('x-rincon-queue:')) {
+          // A speaker can only play its own queue (x-rincon-queue:<its uuid>#0)
+          if (uri !== `x-rincon-queue:${speaker.uuid}#0`) {
+            return fault(res, 714);
+          }
+          // Play from the queue: its first item becomes the current track
+          const own = this.ensureOwnGroup(speaker.uuid);
+          const first = (this.queues.get(speaker.uuid) || [])[0];
+          if (!first) {
+            return fault(res, 701);
+          }
+          own.track = { ...first, uri: first.uri };
+          own.media = { uri };
+          own.state = 'stopped';
+          return reply('');
+        }
+        // Like a real speaker: containers (playlists, albums) cannot be set as the
+        // transport URI directly — they have to be added to the queue.
+        if (uri.startsWith('x-rincon-cpcontainer:')) {
+          return fault(res, 714);
+        }
+        const favorite = (this.scenario.favorites || []).find((f) => f.uri === uri);
+        const metadata = FakeSonos.soapValue(body, 'CurrentURIMetaData') || '';
+        const own = this.ensureOwnGroup(speaker.uuid);
+        // The station name only comes from the metadata sent along, as on real speakers;
+        // without it a stream reports the end of its URL as title.
+        const title = (metadata.match(/<dc:title>([^<]*)<\/dc:title>/) || [])[1];
+        own.track = { uri, title: title || uri.split('/').pop(), class: 'object.item', duration: 0 };
+        own.media = { uri, title, art: title ? favorite?.art : undefined };
+        own.state = 'stopped';
+        return reply('');
+      }
+
+      case 'RemoveAllTracksFromQueue':
+        this.queues.set(speaker.uuid, []);
+        return reply('');
+
+      case 'AddURIToQueue': {
+        const uri = FakeSonos.soapValue(body, 'EnqueuedURI') || '';
+        const favorite = (this.scenario.favorites || []).find((f) => f.uri === uri);
+        const tracks = favorite?.tracks || [{ uri, title: uri, class: 'object.item.audioItem.musicTrack', duration: 200 }];
+        const queue = this.queues.get(speaker.uuid) || [];
+        queue.push(...tracks);
+        this.queues.set(speaker.uuid, queue);
+        return reply(
+          `<FirstTrackNumberEnqueued>1</FirstTrackNumberEnqueued><NumTracksAdded>${tracks.length}</NumTracksAdded>` +
+            `<NewQueueLength>${queue.length}</NewQueueLength>`
+        );
+      }
+
+      case 'Seek':
+        return reply('');
+
+      case 'Browse': {
+        if (speaker.noFavorites) {
+          // e.g. a Sub, surround speaker or Boost: answers with an empty UPnP fault
+          res.writeHead(500);
+          res.end('');
+          return undefined;
+        }
+        if (FakeSonos.soapValue(body, 'ObjectID') !== 'FV:2') {
+          res.writeHead(500);
+          res.end('Unsupported ObjectID');
+          return undefined;
+        }
+        const count = (this.scenario.favorites || []).length;
+        return reply(
+          `<Result>${escapeXml(this.favoritesXml())}</Result>` +
+            `<NumberReturned>${count}</NumberReturned><TotalMatches>${count}</TotalMatches><UpdateID>1</UpdateID>`
+        );
+      }
 
       default:
         res.writeHead(500, { 'Content-Type': 'text/xml' });
@@ -324,7 +534,7 @@ class FakeSonos {
     const groups = (this.scenario?.groups || []).map((group) => {
       const members = group.members?.length ? group.members : [group.coordinator];
       members.forEach((uuid) => grouped.add(uuid));
-      return { coordinator: group.coordinator, members };
+      return { coordinator: group.coordinator, members, groupIdFrom: group.groupIdFrom };
     });
     // Every speaker that is not in a configured group is its own (idle) group, like on a real system.
     for (const uuid of speakers.keys()) {
@@ -349,7 +559,10 @@ class FakeSonos {
             );
           })
           .join('');
-        return `<ZoneGroup Coordinator="${group.coordinator}" ID="${group.coordinator}:${100 + index}">${membersXml}</ZoneGroup>`;
+        // Sonos keeps the ID of the speaker that created a group, so after regrouping the
+        // ID prefix is not necessarily the current coordinator (scenario: "groupIdFrom").
+        const idPrefix = group.groupIdFrom || group.coordinator;
+        return `<ZoneGroup Coordinator="${group.coordinator}" ID="${idPrefix}:${100 + index}">${membersXml}</ZoneGroup>`;
       })
       .join('');
 

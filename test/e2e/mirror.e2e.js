@@ -10,26 +10,13 @@
  *
  * Run with:  npm run test:e2e
  *
- * Environment:
- *   CHROMIUM_PATH   path to a Chromium/Chrome binary (auto-detected if unset)
- *   MM_VERSION      MagicMirror² tag to test against (see setup.js)
- *   E2E_PORT        port for the MagicMirror server (default 8090)
+ * Environment variables: see harness.js.
  */
 
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
-const { spawn } = require('node:child_process');
-const fs = require('node:fs');
-const path = require('node:path');
-const http = require('node:http');
 
-const { setup, ROOT, WORKSPACE, MM_DIR } = require('./setup');
-const { startFakeSonos, loadScenario } = require('./fake-sonos');
-
-const OUTPUT_DIR = path.join(__dirname, 'output');
-const PORT = Number(process.env.E2E_PORT || 8090);
-const BASE_URL = `http://127.0.0.1:${PORT}`;
-const CACHE_DIR = path.join(ROOT, 'cache', 'album-art');
+const { startMirror, cardFor, loadScenario } = require('./harness');
 
 // Group IDs from the simulator are "<coordinator uuid>:<n>".
 const UUID = {
@@ -70,167 +57,21 @@ const INSTANCES = [
   }
 ];
 
-function writeMagicMirrorConfig() {
-  const config = {
-    address: '127.0.0.1',
-    port: PORT,
-    ipWhitelist: [],
-    language: 'en',
-    locale: 'en-US',
-    timeFormat: 24,
-    units: 'metric',
-    modules: INSTANCES.map((instance) => ({
-      module: 'MMM-Sonos',
-      position: instance.position,
-      classes: `e2e-${instance.name}`,
-      config: { ...common, ...instance.config }
-    }))
-  };
-  const file = path.join(MM_DIR, 'config', 'e2e-config.js');
-  fs.writeFileSync(
-    file,
-    `let config = ${JSON.stringify(config, null, 2)};\nif (typeof module !== 'undefined') { module.exports = config; }\n`
-  );
-  return file;
-}
-
-function findChromium() {
-  const candidates = [
-    process.env.CHROMIUM_PATH,
-    '/opt/pw-browsers/chromium',
-    '/usr/bin/google-chrome',
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser'
-  ].filter(Boolean);
-  const found = candidates.find((candidate) => fs.existsSync(candidate));
-  if (!found) {
-    throw new Error('No Chromium found. Set CHROMIUM_PATH to a Chromium or Chrome binary.');
-  }
-  return found;
-}
-
-function waitForServer(url, timeoutMs) {
-  const started = Date.now();
-  return new Promise((resolve, reject) => {
-    const attempt = () => {
-      http
-        .get(url, (res) => {
-          res.resume();
-          if (res.statusCode === 200) {
-            resolve();
-          } else {
-            retry();
-          }
-        })
-        .on('error', retry);
-    };
-    const retry = () => {
-      if (Date.now() - started > timeoutMs) {
-        reject(new Error(`MagicMirror did not start within ${timeoutMs} ms`));
-      } else {
-        setTimeout(attempt, 250);
-      }
-    };
-    attempt();
-  });
-}
-
-// Reads what each instance currently shows, keyed by group id prefix (coordinator uuid).
-async function readInstance(page, name) {
-  return page.evaluate((instanceName) => {
-    const root = document.querySelector(`.e2e-${instanceName} .mmm-sonos`);
-    if (!root) {
-      return null;
-    }
-    const text = (el, selector) => el.querySelector(selector)?.innerText.trim() || null;
-    const cards = [...root.querySelectorAll('[data-group-id]')].map((card) => {
-      const img = card.querySelector('img');
-      return {
-        id: card.dataset.groupId,
-        title: text(card, '.mmm-sonos__title, .mmm-sonos__fullscreen-title, .mmm-sonos__mini-title'),
-        artist: text(card, '.mmm-sonos__artist, .mmm-sonos__fullscreen-artist'),
-        album: text(card, '.mmm-sonos__album, .mmm-sonos__fullscreen-album'),
-        text: card.innerText.replace(/\s+/g, ' ').trim(),
-        img: img ? { src: img.getAttribute('src'), loaded: img.complete && img.naturalWidth > 0 } : null,
-        accented: card.classList.contains('mmm-sonos__group--accented')
-      };
-    });
-    return {
-      error: root.classList.contains('mmm-sonos--error') ? root.innerText : null,
-      empty: text(root, '.mmm-sonos__empty'),
-      cards
-    };
-  }, name);
-}
-
-const cardFor = (state, uuid) => state.cards.find((card) => card.id.startsWith(`${uuid}:`));
-
 describe('MagicMirror² end-to-end', { timeout: 180000 }, () => {
-  let sim;
-  let mm;
-  let mmLog = '';
-  let browser;
+  let mirror;
   let page;
-  const pageErrors = [];
-
-  const screenshot = async (label) => {
-    for (const instance of INSTANCES) {
-      const el = await page.$(`.e2e-${instance.name}`);
-      if (el && (await el.boundingBox())) {
-        await el.screenshot({ path: path.join(OUTPUT_DIR, `${label}-${instance.name}.png`) });
-      }
-    }
-    await page.screenshot({ path: path.join(OUTPUT_DIR, `${label}-page.png`), fullPage: true });
-  };
-
-  // Wait until every instance has rendered data from the given scenario.
-  const waitForRender = async (predicate, description) => {
-    const started = Date.now();
-    let last;
-    while (Date.now() - started < 30000) {
-      last = {};
-      for (const instance of INSTANCES) {
-        last[instance.name] = await readInstance(page, instance.name);
-      }
-      if (predicate(last)) {
-        return last;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-    throw new Error(`Timed out waiting for ${description}. Last state:\n${JSON.stringify(last, null, 2)}`);
-  };
+  let sim;
+  let pageErrors;
+  const screenshot = (label) => mirror.screenshot(label);
+  const waitForRender = (predicate, description) => mirror.waitForRender(predicate, description);
 
   before(async () => {
-    setup();
-    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-    fs.rmSync(CACHE_DIR, { recursive: true, force: true });
-
-    sim = await startFakeSonos(loadScenario('mixed-sources'));
-
-    const configFile = writeMagicMirrorConfig();
-    mm = spawn(process.execPath, ['serveronly'], {
-      cwd: MM_DIR,
-      env: { ...process.env, MM_CONFIG_FILE: configFile, MM_PORT: String(PORT) },
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
-    mm.stdout.on('data', (chunk) => { mmLog += chunk; });
-    mm.stderr.on('data', (chunk) => { mmLog += chunk; });
-    await waitForServer(BASE_URL, 30000);
-
-    const { chromium } = require(path.join(WORKSPACE, 'node_modules', 'playwright-core'));
-    browser = await chromium.launch({ executablePath: findChromium() });
-    page = await browser.newPage({ viewport: { width: 1920, height: 2000 } });
-    page.on('pageerror', (error) => pageErrors.push(error.message));
-    await page.goto(BASE_URL);
+    mirror = await startMirror({ scenario: 'mixed-sources', instances: INSTANCES, common });
+    ({ page, sim, pageErrors } = mirror);
   });
 
   after(async () => {
-    await browser?.close();
-    if (mm) {
-      mm.kill();
-    }
-    await sim?.close();
-    fs.writeFileSync(path.join(OUTPUT_DIR, 'magicmirror.log'), mmLog);
+    await mirror?.stop();
   });
 
   describe('scenario: mixed sources (Spotify, Apple Music, radio, TV)', () => {

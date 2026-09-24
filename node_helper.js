@@ -2,7 +2,7 @@
 
 const NodeHelper = require('node_helper');
 const Log = require('logger');
-const { AsyncDeviceDiscovery, Sonos } = require('sonos');
+const { AsyncDeviceDiscovery, Sonos, Helpers: SonosHelpers } = require('sonos');
 const path = require('node:path');
 const fs = require('node:fs');
 const nodeCrypto = require('node:crypto');
@@ -42,6 +42,8 @@ module.exports = NodeHelper.create({
     this.lastPayload = [];
     this.lastPayloadAt = null;
     this._refreshPromise = null;
+    this.favorites = [];
+    this.favoritesTimer = null;
     this.albumArtCache = new Map(); // in-memory cache: url-hash → local filename
     this.accentColorCache = new Map(); // in-memory cache: filename → { r, g, b } | null
 
@@ -55,12 +57,19 @@ module.exports = NodeHelper.create({
 
   async stop() {
     this._clearTimer();
+    if (this.favoritesTimer) {
+      clearInterval(this.favoritesTimer);
+      this.favoritesTimer = null;
+    }
   },
 
   socketNotificationReceived(notification, payload) {
     switch (notification) {
       case 'SONOS_CONFIG':
         this._configure(this._mergeInstanceConfig(payload || {}));
+        if (this._favoritesLoaded) {
+          this.sendSocketNotification('SONOS_FAVORITES', { favorites: this.favorites, timestamp: Date.now() });
+        }
         break;
       case 'SONOS_REQUEST':
         this._handleDataRequest();
@@ -68,6 +77,27 @@ module.exports = NodeHelper.create({
       case 'SONOS_CLEAR_CACHE':
         this._clearAlbumArtCache();
         this.sendSocketNotification('SONOS_CACHE_CLEARED', { timestamp: Date.now() });
+        break;
+      case 'SONOS_CONTROL_PLAY':
+        this._handlePlay(payload?.zoneId);
+        break;
+      case 'SONOS_CONTROL_PAUSE':
+        this._handlePause(payload?.zoneId);
+        break;
+      case 'SONOS_CONTROL_SET_VOLUME':
+        this._handleSetVolume(payload?.zoneId, payload?.volume);
+        break;
+      case 'SONOS_CONTROL_SET_MEMBER_VOLUME':
+        this._handleSetMemberVolume(payload?.zoneId, payload?.memberName, payload?.volume);
+        break;
+      case 'SONOS_CONTROL_JOIN_GROUP':
+        this._handleJoinGroup(payload?.zoneId, payload?.targetZoneId);
+        break;
+      case 'SONOS_CONTROL_LEAVE_GROUP':
+        this._handleLeaveGroup(payload?.zoneId, payload?.memberName);
+        break;
+      case 'SONOS_CONTROL_PLAY_FAVORITE':
+        this._handlePlayFavorite(payload?.zoneId, payload?.favoriteId);
         break;
     }
   },
@@ -102,6 +132,7 @@ module.exports = NodeHelper.create({
       ...latest,
       showWhenPaused: anyEnabled('showWhenPaused'),
       albumArtColors: anyEnabled('albumArtColors'),
+      enableControls: anyEnabled('enableControls'),
       debug: anyEnabled('debug'),
       hiddenSpeakers: hiddenByAll('hiddenSpeakers'),
       hiddenGroups: hiddenByAll('hiddenGroups')
@@ -119,6 +150,8 @@ module.exports = NodeHelper.create({
         maxGroups: 6,
         showWhenPaused: false,
         hideWhenNothingPlaying: true,
+        enableControls: false,
+        favoritesRefreshInterval: 300000,
         forceHttps: false,
         showTvSource: true,
         showTvIcon: true,
@@ -170,6 +203,19 @@ module.exports = NodeHelper.create({
 
     if (!this.updateTimer) {
       this.updateTimer = setInterval(() => this._refresh(), Math.max(this.config.updateInterval, 5000));
+    }
+
+    if (this.config.enableControls) {
+      this._refreshFavorites();
+      if (!this.favoritesTimer) {
+        this.favoritesTimer = setInterval(
+          () => this._refreshFavorites(),
+          Math.max(this.config.favoritesRefreshInterval || 300000, 60000)
+        );
+      }
+    } else if (this.favoritesTimer) {
+      clearInterval(this.favoritesTimer);
+      this.favoritesTimer = null;
     }
 
     // Only call _refresh() here when the coordinator was NOT already known above.
@@ -300,6 +346,9 @@ module.exports = NodeHelper.create({
 
       this.lastPayload = formatted;
       this.lastPayloadAt = Date.now();
+      if (this.config.enableControls && !this._favoritesLoaded && Date.now() >= (this._favoritesRetryAt || 0)) {
+        this._refreshFavorites();
+      }
       this.sendSocketNotification('SONOS_DATA', {
         groups: formatted,
         timestamp: this.lastPayloadAt
@@ -308,6 +357,323 @@ module.exports = NodeHelper.create({
       this.sendError('Failed to fetch Sonos data', error);
       this.coordinator = null; // Force re-discovery on the next refresh
       this.lastPayloadAt = null; // Answer the next request with a fresh poll, not old data
+    }
+  },
+
+  // Only one favorites fetch runs at a time; callers that arrive meanwhile share it.
+  _refreshFavorites() {
+    if (!this.coordinator) {
+      // No speaker found yet: _doRefresh() fetches favorites once one is found,
+      // instead of leaving the list empty until the next favoritesRefreshInterval.
+      return Promise.resolve();
+    }
+    if (!this._favoritesPromise) {
+      this._favoritesPromise = this._fetchFavorites().finally(() => {
+        this._favoritesPromise = null;
+      });
+    }
+    return this._favoritesPromise;
+  },
+
+  // Favorites are the same for the whole household, but not every device can list them
+  // (a Sub, surround speakers or a Boost answer with an error). Try the speaker found at
+  // discovery first, then each zone coordinator.
+  _favoritesSources() {
+    const sources = [this.coordinator];
+    const seen = new Set([`${this.coordinator?.host}:${this.coordinator?.port || 1400}`]);
+    for (const zone of this.lastPayload || []) {
+      const key = `${zone.coordinatorHost}:${zone.coordinatorPort || 1400}`;
+      if (zone.coordinatorHost && !seen.has(key)) {
+        seen.add(key);
+        sources.push(new Sonos(zone.coordinatorHost, zone.coordinatorPort || 1400));
+      }
+    }
+    return sources.filter(Boolean);
+  },
+
+  async _fetchFavorites() {
+    let lastError = null;
+    for (const source of this._favoritesSources()) {
+      try {
+        this.favorites = await this._browseFavorites(source);
+        this._favoritesLoaded = true;
+        this._favoritesRetryAt = 0;
+        this.sendSocketNotification('SONOS_FAVORITES', { favorites: this.favorites, timestamp: Date.now() });
+        return;
+      } catch (error) {
+        lastError = error;
+        this.sendDebug('Could not load favorites from', source.host, this._describeError(error));
+      }
+    }
+    // Do not ask again on every refresh; try again in 30 s.
+    this._favoritesRetryAt = Date.now() + 30 * 1000;
+    Log.warn(`[MMM-Sonos] Could not load Sonos favorites: ${this._describeError(lastError)}`);
+  },
+
+  async _browseFavorites(source) {
+    // Browse FV:2 directly instead of getFavorites(): the latter drops the metadata
+    // (<r:resMD>) Sonos stores with each favorite, which is needed to play playlists
+    // and most service favorites.
+    const result = await source.contentDirectoryService().Browse({
+      ObjectID: 'FV:2',
+      BrowseFlag: 'BrowseDirectChildren',
+      Filter: '*',
+      StartingIndex: '0',
+      RequestedCount: '100',
+      SortCriteria: ''
+    });
+    const didl = await SonosHelpers.ParseXml(result?.Result || '');
+    const items = didl?.['DIDL-Lite']?.item;
+    return this._mapFavorites(
+      (Array.isArray(items) ? items : items ? [items] : []).map((item) => ({
+        id: item.id,
+        title: item['dc:title'],
+        uri: typeof item.res === 'object' ? item.res?._ : item.res,
+        metadata: item['r:resMD'] || ''
+      }))
+    );
+  },
+
+  // Shorten UPnP errors (the sonos package includes the whole SOAP envelope) to their code.
+  _describeError(error) {
+    const message = error?.message || String(error);
+    const code = message.match(/<errorCode>(\d+)<\/errorCode>/)?.[1];
+    if (code) {
+      return `UPnP error ${code}`;
+    }
+    return /statusCode 500/.test(message) ? 'UPnP error (no code)' : message;
+  },
+
+  // Playlists, albums and similar favorites (x-rincon-cpcontainer:) cannot be set as the
+  // transport URI — Sonos rejects them. Like the Sonos app, replace the queue with them
+  // and play the queue. Streams are set directly, with their metadata so the speaker
+  // knows the station name and service.
+  _isContainerFavorite(favorite) {
+    return /^x-rincon-cpcontainer:/i.test(favorite.uri || '') || /object\.container/i.test(favorite.metadata || '');
+  },
+
+  async _playFavorite(device, zone, favorite) {
+    const metadata = favorite.metadata || '';
+    // Name the step that failed, so a report from a real system says what Sonos rejected.
+    const step = async (name, action) => {
+      try {
+        return await action();
+      } catch (error) {
+        const upnpClass = metadata.match(/<upnp:class>([^<]*)<\/upnp:class>/)?.[1] || 'unknown class';
+        throw new Error(`${name}: ${this._describeError(error)} (favorite "${favorite.title}", ${upnpClass}, ${favorite.uri})`, { cause: error });
+      }
+    };
+    if (this._isContainerFavorite(favorite)) {
+      // A speaker can only play its own queue. The group ID does not tell which speaker
+      // that is: Sonos keeps the ID of the speaker that created the group, which after
+      // regrouping need not be the coordinator. Ask the speaker itself.
+      const coordinatorUuid = await step('identify speaker', () => this._speakerUuid(device, zone));
+      await step('clear queue', () => device.flush());
+      await step('add to queue', () => device.queue({ uri: favorite.uri, metadata }));
+      await step('select queue', () => device.setAVTransportURI({ uri: `x-rincon-queue:${coordinatorUuid}#0`, metadata: '', onlySetUri: true }));
+      await step('select track', () => device.selectTrack(1));
+      await step('play', () => device.play());
+      return;
+    }
+    await step('play stream', () => device.setAVTransportURI({ uri: favorite.uri, metadata }));
+  },
+
+  // Sonos reports placeholders such as ZPSTR_CONNECTING / ZPSTR_BUFFERING while a
+  // stream starts; they are status codes, not something to show as "now playing".
+  _cleanStreamText(value) {
+    if (typeof value !== 'string') {
+      return null;
+    }
+    const text = value.trim();
+    return !text || /^ZPSTR_/i.test(text) ? null : text;
+  },
+
+  async _speakerUuid(device, zone) {
+    try {
+      const description = await device.deviceDescription();
+      const uuid = String(description?.UDN || '').replace(/^uuid:/, '');
+      if (uuid) {
+        return uuid;
+      }
+    } catch (error) {
+      this.sendDebug('Could not read device description', device.host, this._describeError(error));
+    }
+    return zone.coordinatorUuid || String(zone.id || '').split(':')[0];
+  },
+
+  _mapFavorites(items) {
+    return (items || [])
+      .map((item, index) => ({
+        id: item.id || `favorite-${index}`,
+        title: item.title || 'Untitled',
+        uri: item.uri,
+        metadata: item.metadata || ''
+      }))
+      .filter((f) => !!f.uri);
+  },
+
+  // After a control action, fetch fresh state so the change shows up right away. A
+  // refresh that is already running started before the action, so queue a new one
+  // after it instead of sharing its (now stale) result.
+  _refreshAfterControl() {
+    this.lastPayloadAt = null;
+    if (this._refreshPromise) {
+      this._refreshPromise.then(() => this._refresh());
+    } else {
+      this._refresh();
+    }
+  },
+
+  // Sonos accepts integer volumes 0–100; anything else from the browser is rejected.
+  _sanitizeVolume(volume) {
+    const value = Number(volume);
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+    return Math.min(100, Math.max(0, Math.round(value)));
+  },
+
+  async _handlePlay(zoneId) {
+    const zone = this._findZone(zoneId);
+    if (!zone || !zone.coordinatorHost) {
+      this._sendControlResult(zoneId, 'play', false, 'Zone not found');
+      return;
+    }
+    try {
+      await new Sonos(zone.coordinatorHost, zone.coordinatorPort || 1400).play();
+      this._sendControlResult(zoneId, 'play', true);
+      this._refreshAfterControl();
+    } catch (error) {
+      this._sendControlResult(zoneId, 'play', false, error?.message || String(error));
+    }
+  },
+
+  async _handlePause(zoneId) {
+    const zone = this._findZone(zoneId);
+    if (!zone || !zone.coordinatorHost) {
+      this._sendControlResult(zoneId, 'pause', false, 'Zone not found');
+      return;
+    }
+    try {
+      await new Sonos(zone.coordinatorHost, zone.coordinatorPort || 1400).pause();
+      this._sendControlResult(zoneId, 'pause', true);
+      this._refreshAfterControl();
+    } catch (error) {
+      this._sendControlResult(zoneId, 'pause', false, error?.message || String(error));
+    }
+  },
+
+  async _handleSetVolume(zoneId, rawVolume) {
+    const volume = this._sanitizeVolume(rawVolume);
+    if (volume === null) {
+      this._sendControlResult(zoneId, 'setVolume', false, 'Invalid volume');
+      return;
+    }
+    const zone = this._findZone(zoneId);
+    if (!zone) {
+      this._sendControlResult(zoneId, 'setVolume', false, 'Zone not found');
+      return;
+    }
+    const targets = (zone.memberDetails || [])
+      .filter((m) => m.host)
+      .map((m) => ({ host: m.host, port: m.port || 1400 }));
+    if (!targets.length && zone.coordinatorHost) {
+      targets.push({ host: zone.coordinatorHost, port: zone.coordinatorPort || 1400 });
+    }
+    if (!targets.length) {
+      this._sendControlResult(zoneId, 'setVolume', false, 'No reachable speakers in zone');
+      return;
+    }
+    try {
+      await Promise.all(targets.map((target) => new Sonos(target.host, target.port).setVolume(volume)));
+      this._sendControlResult(zoneId, 'setVolume', true);
+    } catch (error) {
+      this._sendControlResult(zoneId, 'setVolume', false, error?.message || String(error));
+    }
+  },
+
+  async _handleSetMemberVolume(zoneId, memberName, rawVolume) {
+    const volume = this._sanitizeVolume(rawVolume);
+    if (volume === null) {
+      this._sendControlResult(zoneId, 'setMemberVolume', false, 'Invalid volume');
+      return;
+    }
+    const zone = this._findZone(zoneId);
+    if (!zone) {
+      this._sendControlResult(zoneId, 'setMemberVolume', false, 'Zone not found');
+      return;
+    }
+    const target = this._resolveMemberTarget(zone, memberName);
+    if (!target) {
+      this._sendControlResult(zoneId, 'setMemberVolume', false, 'Speaker not found in zone');
+      return;
+    }
+    try {
+      await new Sonos(target.host, target.port).setVolume(volume);
+      this._sendControlResult(zoneId, 'setMemberVolume', true);
+    } catch (error) {
+      this._sendControlResult(zoneId, 'setMemberVolume', false, error?.message || String(error));
+    }
+  },
+
+  async _handleJoinGroup(zoneId, targetZoneId) {
+    const zone = this._findZone(zoneId);
+    const targetZone = this._findZone(targetZoneId);
+    const plan = this._resolveJoinGroupPlan(zone, targetZone);
+    if (plan.error) {
+      this._sendControlResult(zoneId, 'joinGroup', false, plan.error);
+      return;
+    }
+    try {
+      // Move every member of the target zone individually — joinGroup() moves only the
+      // one device it's called on, so joining just the target's coordinator would strand
+      // its own followers (if the target itself already has more than one speaker)
+      // instead of bringing all of them into the current group.
+      await Promise.all(
+        plan.targetMembers.map((member) => new Sonos(member.host, member.port).joinGroup(plan.anchorRoomName))
+      );
+      this._sendControlResult(zoneId, 'joinGroup', true);
+      this._refreshAfterControl();
+    } catch (error) {
+      this._sendControlResult(zoneId, 'joinGroup', false, error?.message || String(error));
+    }
+  },
+
+  async _handleLeaveGroup(zoneId, memberName) {
+    const zone = this._findZone(zoneId);
+    const target = this._resolveLeaveGroupTarget(zone, memberName);
+    if (target.error) {
+      this._sendControlResult(zoneId, 'leaveGroup', false, target.error);
+      return;
+    }
+    try {
+      await new Sonos(target.host, target.port).leaveGroup();
+      this._sendControlResult(zoneId, 'leaveGroup', true);
+      this._refreshAfterControl();
+    } catch (error) {
+      this._sendControlResult(zoneId, 'leaveGroup', false, error?.message || String(error));
+    }
+  },
+
+  async _handlePlayFavorite(zoneId, favoriteId) {
+    const zone = this._findZone(zoneId);
+    if (!zone || !zone.coordinatorHost) {
+      this._sendControlResult(zoneId, 'playFavorite', false, 'Zone not found');
+      return;
+    }
+    const favorite = (this.favorites || []).find((f) => f.id === favoriteId);
+    if (!favorite) {
+      this._sendControlResult(zoneId, 'playFavorite', false, 'Favorite not found');
+      return;
+    }
+    try {
+      await this._playFavorite(new Sonos(zone.coordinatorHost, zone.coordinatorPort || 1400), zone, favorite);
+      this._sendControlResult(zoneId, 'playFavorite', true);
+      // Without this, the overlay only learns the new track on the next regular poll
+      // tick (up to `updateInterval`, e.g. 15s) — same pattern as join/leave.
+      this._refreshAfterControl();
+    } catch (error) {
+      this._sendControlResult(zoneId, 'playFavorite', false, error?.message || String(error));
     }
   },
 
@@ -339,28 +705,14 @@ module.exports = NodeHelper.create({
         : typeof membersRaw === 'object'
         ? Object.values(membersRaw)
         : [];
-      const members = [];
-      let skipGroup = false;
-
       if (hiddenGroups.has((id || '').toLowerCase()) || hiddenGroups.has((name || '').toLowerCase())) {
         this.sendDebug('Skipping hidden group', name || id);
         continue;
       }
 
-      for (const member of memberList) {
-        const displayName = this._pick(member, ['roomName', 'name', 'ZoneName']);
-        if (!displayName) {
-          continue;
-        }
-        if (hiddenSpeakers.has(displayName.toLowerCase())) {
-          this.sendDebug('Skipping group because member is hidden', displayName, name);
-          skipGroup = true;
-          break;
-        }
-        members.push(displayName);
-      }
-
+      const { members, memberDetails, skipGroup } = this._buildMemberDetails(memberList, hiddenSpeakers);
       if (skipGroup) {
+        this.sendDebug('Skipping group because a member is hidden', name || id);
         continue;
       }
 
@@ -377,7 +729,7 @@ module.exports = NodeHelper.create({
         const source = this._detectSource(track);
         const isTvSource = source === 'tv';
 
-        const allowWhenPaused = this.config.showWhenPaused || isTvSource;
+        const allowWhenPaused = this.config.showWhenPaused || isTvSource || this.config.enableControls;
         if (state !== 'playing' && !allowWhenPaused) {
           this.sendDebug('Skipping group because it is not playing (and not allowed when paused)', name || id, state, {
             isTvSource
@@ -385,7 +737,7 @@ module.exports = NodeHelper.create({
           continue;
         }
 
-        if (state === 'stopped' && this.config.hideWhenNothingPlaying && !isTvSource) {
+        if (state === 'stopped' && this.config.hideWhenNothingPlaying && !isTvSource && !this.config.enableControls) {
           this.sendDebug('Hiding stopped group because hideWhenNothingPlaying is enabled', name || id);
           continue;
         }
@@ -419,7 +771,7 @@ module.exports = NodeHelper.create({
             if (posInfo?.TrackMetaData) {
               const raw = this._parseDIDL(posInfo.TrackMetaData, 'r:streamContent');
               if (raw && raw.trim()) {
-                streamContent = raw.trim();
+                streamContent = this._cleanStreamText(raw);
               }
             }
 
@@ -451,7 +803,7 @@ module.exports = NodeHelper.create({
           track?.album ||
           track?.albumArtist ||
           null;
-        const streamTitle = track?.streamTitle || streamContent || null;
+        const streamTitle = this._cleanStreamText(track?.streamTitle) || streamContent || null;
 
         // Determine display title and artist depending on source type
         let displayTitle;
@@ -461,7 +813,7 @@ module.exports = NodeHelper.create({
           displayArtist = null;
         } else if (isRadioSource) {
           // track.title for a radio stream is often a raw URI or empty — prefer stationName
-          const rawTitle = track?.title || '';
+          const rawTitle = this._cleanStreamText(track?.title) || '';
           const titleIsUseless =
             !rawTitle ||
             /^https?:\/\//i.test(rawTitle) ||
@@ -526,10 +878,37 @@ module.exports = NodeHelper.create({
 
         // Only ask the speaker for its room name when the group data lacks one.
         const coordinatorName = (!name || !members.length) ? await this._inferCoordinatorName(coordinator) : null;
+        const effectiveMembers = members.length ? members : [coordinatorName || name || 'Sonos'];
+        let effectiveMemberDetails = memberDetails.length
+          ? memberDetails
+          : [{ name: effectiveMembers[0], host: coordinator.host || null, port: coordinator.port || 1400 }];
+
+        // Per-speaker volumes are only needed by the touch-control overlay, so skip the
+        // extra network round trips (one getVolume() per member) unless controls are on.
+        if (this.config.enableControls && effectiveMemberDetails.length > 1) {
+          effectiveMemberDetails = await Promise.all(
+            effectiveMemberDetails.map(async (member) => {
+              if (!member.host) {
+                return { ...member, volume: null };
+              }
+              try {
+                const memberVolume = await new Sonos(member.host, member.port || 1400).getVolume();
+                return { ...member, volume: memberVolume };
+              } catch (error) {
+                this.sendDebug('Failed to fetch member volume', member.name, error?.message || error);
+                return { ...member, volume: null };
+              }
+            })
+          );
+        }
+
         formatted.push({
           id: id || coordinator.uuid || coordinator.host,
           name: name || coordinatorName || 'Sonos',
           coordinatorHost: coordinator.host || null,
+          coordinatorPort: coordinator.port || 1400,
+          coordinatorUuid: typeof group.Coordinator === 'string' ? group.Coordinator : null,
+          memberDetails: effectiveMemberDetails,
           playbackState: state,
           title: displayTitle,
           artist: displayArtist,
@@ -543,7 +922,7 @@ module.exports = NodeHelper.create({
           volume,
           position,
           duration,
-          members: members.length ? members : [coordinatorName || name || 'Sonos']
+          members: effectiveMembers
         });
       } catch (error) {
         this.sendDebug('Failed to fetch data for group', name || id, error?.message || error);
@@ -552,6 +931,17 @@ module.exports = NodeHelper.create({
     // maxGroups is applied by each frontend instance after its own allowed/hidden
     // filters; limiting here could drop the only group an instance is allowed to show.
     return formatted.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  },
+
+  _findZone(zoneId) {
+    return (this.lastPayload || []).find((z) => z.id === zoneId) || null;
+  },
+
+  _sendControlResult(zoneId, action, success, error) {
+    if (!success) {
+      Log.warn(`[MMM-Sonos] Control action "${action}" failed for zone ${zoneId}: ${this._describeError(error)}`);
+    }
+    this.sendSocketNotification('SONOS_CONTROL_RESULT', { zoneId, action, success, error: error || null });
   },
 
   _resolveCoordinator(group) {
@@ -581,6 +971,79 @@ module.exports = NodeHelper.create({
     }
 
     return null;
+  },
+
+  _resolveMemberHost(member) {
+    const location = this._pick(member, ['Location', 'location']);
+    if (!location) {
+      return null;
+    }
+    try {
+      const url = new URL(location);
+      return { host: url.hostname, port: url.port ? parseInt(url.port, 10) : 1400 };
+    } catch (error) {
+      this.sendDebug('Failed to parse member location', location, error?.message || error);
+      return null;
+    }
+  },
+
+  // Builds `members` (display names) and `memberDetails` ({name, host, port}) from the
+  // same pass over the raw member list, so a member always pairs with the right host even
+  // when its location can't be resolved — the two used to be built as separate arrays that
+  // could silently desync.
+  _buildMemberDetails(memberList, hiddenSpeakers) {
+    const members = [];
+    const memberDetails = [];
+    let skipGroup = false;
+    for (const member of memberList) {
+      const displayName = this._pick(member, ['roomName', 'name', 'ZoneName']);
+      if (!displayName) continue;
+      if (hiddenSpeakers.has(displayName.toLowerCase())) {
+        skipGroup = true;
+        break;
+      }
+      members.push(displayName);
+      const host = this._resolveMemberHost(member);
+      memberDetails.push({ name: displayName, host: host ? host.host : null, port: host ? host.port : null });
+    }
+    return { members, memberDetails, skipGroup };
+  },
+
+  // Finds the {host, port} of one named member within a zone, for per-speaker volume and
+  // leave-group actions that must target a single device rather than the whole group.
+  _resolveMemberTarget(zone, memberName) {
+    if (!zone || !memberName) return null;
+    const target = (zone.memberDetails || []).find(
+      (m) => (m.name || '').toLowerCase() === memberName.toLowerCase()
+    );
+    if (!target || !target.host) return null;
+    return { host: target.host, port: target.port || 1400 };
+  },
+
+  _resolveLeaveGroupTarget(zone, memberName) {
+    if (!zone) return { error: 'Zone not found' };
+    if ((zone.memberDetails || []).length <= 1) {
+      return { error: 'Zone has only one speaker' };
+    }
+    const target = this._resolveMemberTarget(zone, memberName);
+    if (!target) return { error: 'Speaker not found in zone' };
+    return { host: target.host, port: target.port };
+  },
+
+  // joinGroup() called on a device moves only THAT device to follow a new coordinator —
+  // it does not bring that device's own followers with it. So merging target zone T into
+  // the currently-open zone G must move every one of T's member devices individually to
+  // join G (using one of G's own room names as the anchor), never a member of G itself —
+  // otherwise, if G already has more than one speaker, redirecting G's own coordinator to
+  // join something else abandons G's other members instead of extending the group.
+  _resolveJoinGroupPlan(zone, targetZone) {
+    if (!zone || !(zone.members || []).length) return { error: 'Zone not found' };
+    if (!targetZone) return { error: 'Target zone not found' };
+    if (targetZone.id === zone.id) return { error: 'Already in that group' };
+    const anchorRoomName = zone.members[0];
+    const targetMembers = (targetZone.memberDetails || []).filter((m) => m.host);
+    if (!targetMembers.length) return { error: 'Target zone has no reachable speakers' };
+    return { anchorRoomName, targetMembers };
   },
 
   async _inferCoordinatorName(coordinator) {

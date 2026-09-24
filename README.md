@@ -23,6 +23,7 @@ A MagicMirror² module that automatically discovers your Sonos zones and shows w
 - 🔠 Adjust text size, album art size, max groups, and module width via config.
 - 🧭 Control alignment without extra CSS – choose left, center, right, or distributed spacing.
 - 🕒 Show the last update time and optionally hide the module when nothing is playing.
+- 👆 Touch control mode – tap a card to play/pause, adjust group volume, and browse/play your Sonos favorites directly from the mirror.
 
 ## Disclaimer
 
@@ -183,7 +184,14 @@ An example showing all available configuration options:
     tvIconText: 'TV',                // Text to use when tvIconMode is 'text'
     tvIconSvgPath: null,             // Path/URL to SVG when tvIconMode is 'svg' (defaults to bundled asset)
     tvLabel: null,                   // Override TV badge text (defaults to translated "TV")
-    
+
+    // Touch control mode
+    enableControls: false,           // Turn cards into a tappable play/pause/volume/favorites control surface
+    controlShowIdleZones: true,      // false = only show playing zones; idle ones reachable via the "+" button
+    favoritesRefreshInterval: 300000,// How often (ms) the favorites list is re-fetched from Sonos
+    maxFavorites: 12,                // Max favorites shown in the overlay before it scrolls
+    controlVolumeStep: 5,            // Step size of the volume slider in the control overlay
+
     // Debugging
     debug: false                     // Enable detailed logging
   }
@@ -263,6 +271,11 @@ Restart MagicMirror² afterwards to load the latest code.
 | `tvIconText` | `'TV'` | Text shown when `tvIconMode` is `'text'`. Scales with `albumArtSize`. |
 | `tvIconSvgPath` | `null` | Path or URL to an SVG used when `tvIconMode` is `'svg'`. If `null`, a bundled `assets/tv-default.svg` is used. |
 | `tvLabel` | `null` | Override the text label for the TV badge (defaults to the translated "TV"). |
+| `enableControls` | `false` | Master switch for touch control mode. |
+| `controlShowIdleZones` | `true` | When `true`, every zone is always shown in control mode (idle ones get a "Nothing playing" card). When `false`, only playing zones are shown, matching normal mode — idle zones are reached via the "+" more-speakers button. |
+| `favoritesRefreshInterval` | `300000` | How often (ms) the favorites list is re-fetched from Sonos. |
+| `maxFavorites` | `12` | Maximum number of favorites shown in the overlay before it scrolls. |
+| `controlVolumeStep` | `5` | Step size of the volume slider in the control overlay. |
 | `debug` | `false` | Log extra information to the MagicMirror console. |
 
 ### TV icon choices
@@ -362,6 +375,103 @@ Use `fullscreenSpeaker` to pin the card to a specific speaker. The value can be 
 | `fullscreenSpeaker` | `null` | Speaker/group to show. Accepts a speaker name, group name, group ID, or coordinator IP. When `null`, the first currently-playing group is used. |
 | `fullscreenAlbumArtSize` | `300` | Album art size in pixels. |
 | `fullscreenWidth` | `null` | Set a maximum width for the fullscreen card (e.g. `600` or `'600px'`). |
+
+### Touch control mode
+
+Setting `enableControls: true` turns MMM-Sonos from a pure display into a
+tappable control surface, for use on a touch-screen (or any mirror you're
+willing to touch). It only changes behavior in `row` and `grid`
+`displayMode` — `mini` and `fullscreen` are unaffected.
+
+```javascript
+{
+  module: 'MMM-Sonos',
+  position: 'bottom_left',
+  config: {
+    displayMode: 'row',
+    enableControls: true,
+    controlShowIdleZones: true,       // false = only show playing zones; reach idle ones via the "+" button
+    favoritesRefreshInterval: 300000, // how often the favorites list is re-fetched (ms)
+    maxFavorites: 12,                 // max favorites shown before the list scrolls
+    controlVolumeStep: 5              // slider step size
+  }
+}
+```
+
+With `enableControls: true`:
+
+- By default (`controlShowIdleZones: true`), every zone on the network is
+  shown, not just ones currently playing — idle speakers get a simple
+  "Nothing playing" card instead of being hidden (`hideWhenNothingPlaying`
+  and `showWhenPaused` no longer apply).
+- Set `controlShowIdleZones: false` to only show zones that are actually
+  playing, just like normal (non-control) mode. Idle zones are then reached
+  through a small "+" button that appears in the corner of the module —
+  tapping it lists the hidden zones so you can open one and start playback
+  there.
+- Tapping any visible card (playing or idle) opens a control overlay with
+  play/pause, a volume slider, and a list of your Sonos favorites.
+- The volume slider controls the whole group together: every speaker in
+  that group is set to the same volume level, not just the coordinator.
+- Once a zone has more than one speaker, a collapsed "▾ Per-speaker volume"
+  section appears below the group slider with one slider per member, for
+  adjusting a single speaker without moving the rest of the group.
+- A "Speakers" button in the overlay header opens a picker for changing
+  group membership: pick another zone to merge every one of its speakers
+  into the one you're viewing, or tap "Remove" next to a member to split
+  it back out into its own standalone zone. The picker stays open after
+  each tap (each row briefly disables itself mid-request) so you can pull
+  in several zones, or remove several members, in one sitting.
+- Favorites come directly from what you've saved in the Sonos app
+  (via Sonos' own favorites list) — there is no separate config-defined
+  station list to maintain.
+- The overlays follow the module's look (fonts, colours, `fontScale` /
+  `textSize`), and every label is translated.
+
+> **Security note:** anyone who can open your MagicMirror² page in a browser
+> can control your speakers while `enableControls` is on. Keep
+> `ipWhitelist` / `address` in your MagicMirror config restricted to devices
+> you trust (the default only allows the mirror itself).
+
+#### Screenshots
+
+**Cards with idle speakers (`controlShowIdleZones: true`):**
+
+![Touch control mode – cards with idle speakers](docs/touch-cards.png)
+
+**Control overlay (play/pause, group and per-speaker volume, favorites):**
+
+![Touch control mode – control overlay](docs/touch-overlay.png)
+
+**Speakers picker (group / ungroup):**
+
+![Touch control mode – speakers picker](docs/touch-speakers.png)
+
+**"+" tile for idle speakers (`controlShowIdleZones: false`):**
+
+![Touch control mode – more speakers tile](docs/touch-more-speakers-button.png)
+
+**Touch control mode option reference:**
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `enableControls` | `false` | Master switch for touch control mode. |
+| `controlShowIdleZones` | `true` | When `true`, every zone is always shown (idle ones get a "Nothing playing" card). When `false`, only playing zones are shown, matching normal mode — idle zones are reached via the "+" more-speakers button. |
+| `favoritesRefreshInterval` | `300000` | How often (ms) the favorites list is re-fetched from Sonos. |
+| `maxFavorites` | `12` | Maximum number of favorites shown in the overlay before it scrolls. |
+| `controlVolumeStep` | `5` | Step size of the volume slider in the control overlay. |
+
+#### Known limitations
+
+- `maxGroups` (default `6`) also limits how many cards control mode shows.
+  Raise it if you have more zones than that; idle speakers behind the "+"
+  tile are not limited.
+- Favorites are played the way the Sonos app plays them: stations and
+  streams directly, playlists and albums by replacing the queue. If a
+  favorite does not start, the reason is written to the MagicMirror log
+  (`Control action "playFavorite" failed …`) — please include it in a report.
+- Sonos Radio station collections (such as "Discover Sonos Radio") are
+  stored without a playable address and are not listed.
 
 ## Additional features
 
@@ -496,10 +606,16 @@ This module uses dependency overrides to mitigate known security vulnerabilities
 
 Some ideas for future improvements:
 
-- Add volume control through touch or remote notifications.
+- ~~Add volume control through touch or remote notifications.~~ ✅ **Completed**
 - ~~Show the playback source (Spotify, Radio, Line-in) with an icon.~~ ✅ **Completed**
 - ~~Include a simple progress indicator for the current track.~~ ✅ **Completed**
 - ~~Cache album art locally for faster loading on slower networks.~~ ✅ **Completed**
+- ~~Adjust volume on individual speakers in a group, in addition to group volume.~~ ✅ **Completed**
+- ~~Possibility to group and ungroup speakers.~~ ✅ **Completed**
+- Skip to the next/previous track directly from the control overlay, not just play/pause.
+- Add a sleep timer — automatically pause playback after N minutes.
+- Add a mute button per speaker, in addition to the volume slider.
+- Show a small icon per favorite indicating its type (radio, playlist, stream).
 
 ## License
 
