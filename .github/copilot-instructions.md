@@ -44,6 +44,8 @@ Please follow these best practices when contributing to **MMM-Sonos**.
 - Tests live in the `test/` directory and use Node.js built-in test runner (`node:test`).
 - Test file naming convention: `test/<subject>.test.js`.
 - Tests must pass before merging (`npm test` must exit with code 0).
+- Tests load the real module files via `test/helpers/load-module.js`; never copy functions into test files.
+- For changes to rendering or to how Sonos data is read, also run `npm run test:e2e` (real MagicMirror² + Sonos simulator, see `test/README.md`) and add a scenario/assertion when needed.
 
 ---
 
@@ -83,7 +85,7 @@ Please follow these best practices when contributing to **MMM-Sonos**.
 | `translations/`               | i18n translation files                               |
 | `assets/`                     | Static assets (SVG icons, screenshots)               |
 | `docs/`                       | Screenshots and documentation images                 |
-| `test/`                       | Unit tests (Node.js built-in test runner)            |
+| `test/`                       | Unit/integration tests; `test/e2e/` end-to-end test and Sonos simulator |
 | `cache/album-art/`            | Local album art cache (gitignored, auto-created)     |
 | `CHANGELOG.md`                | Change history (always update on changes)            |
 | `.github/copilot-instructions.md` | This file                                        |

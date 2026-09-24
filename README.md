@@ -213,7 +213,7 @@ Restart MagicMirror² afterwards to load the latest code.
 | `allowedSpeakers` | `[]` | **Whitelist**: only show groups that have at least one member in this list. When empty, all groups are shown (unless hidden by `hiddenSpeakers`/`hiddenGroups`). |
 | `allowedGroups` | `[]` | **Whitelist**: only show groups whose name, ID, or coordinator IP appears in this list. When empty, all groups are shown. |
 | `knownDevices` | `[]` | List of static Sonos IPs to try when automatic discovery fails. |
-| `maxGroups` | `6` | Maximum number of groups to render. Handy for large Sonos setups. |
+| `maxGroups` | `6` | Maximum number of groups to render (counted after `allowedSpeakers`/`hiddenSpeakers` and paused-group filtering). Handy for large Sonos setups. |
 | `displayMode` | `'row'` | `auto`, `grid`, `row`, `mini`, or `fullscreen`. `row` keeps groups on a single horizontal line with scrolling if required. `grid` arranges cards across `columns` columns. `auto` switches to grid when the number of groups exceeds `columns`. `mini` renders each group as a compact single-row card (thumbnail + title). `fullscreen` shows a single speaker as a large, full-width card with prominent album art. |
 | `columns` | `2` | Number of columns in grid mode (1–4). Also used as the threshold when `displayMode` is `auto`. |
 | `fontScale` | `1` | Multiplier for text size. `1.2` increases text by 20%. |
@@ -250,7 +250,7 @@ Restart MagicMirror² afterwards to load the latest code.
 | `miniShowArtist` | `true` | Append the artist to the title line in `mini` mode (`"Track · Artist"`). |
 | `miniShowSource` | `false` | Show the playback source label (Spotify, Radio, etc.) in `mini` mode. |
 | `miniWidth` | `null` | Constrain the width of each mini-mode card (e.g., `400` or `'400px'`). |
-| `fullscreenSpeaker` | `null` | Speaker/group to display in `fullscreen` mode. Accepts a speaker name, group name, group ID, or coordinator IP. When `null`, the first playing group is used. |
+| `fullscreenSpeaker` | `null` | Speaker/group to display in `fullscreen` mode. Accepts a speaker name, group name, group ID, or coordinator IP. When `null`, the first playing group that passes `allowedSpeakers`/`hiddenSpeakers` is used. |
 | `fullscreenAlbumArtSize` | `300` | Album art size in pixels for `fullscreen` mode cards. |
 | `fullscreenWidth` | `null` | Constrain the fullscreen wrapper width (e.g., `600` or `'600px'`). |
 | `cacheAlbumArt` | `true` | Download and cache album art images locally so they load instantly on subsequent polls. Cached files are stored in `<module>/cache/album-art/` and served by MagicMirror's built-in static file server. |
@@ -465,15 +465,19 @@ You can add custom TV icons by placing SVG files in the `assets` folder and refe
 The module includes several npm scripts for development and maintenance:
 
 ```bash
-npm run lint    # Run ESLint to check code quality
-npm run audit   # Check for security vulnerabilities in dependencies
-npm start       # Run the node helper directly (for testing)
+npm run lint      # Run ESLint to check code quality
+npm test          # Unit and integration tests (fast, no MagicMirror needed)
+npm run test:e2e  # End-to-end test in a real MagicMirror² with simulated Sonos speakers
+npm run sim       # Start the Sonos simulator on 127.0.0.1:1400+ for manual testing
+npm run audit     # Check for security vulnerabilities in dependencies
 ```
+
+The end-to-end test installs MagicMirror² into `.e2e/` on first run, starts simulated speakers playing Spotify, Apple Music, Amazon Music, radio, TV and a local library, and checks every display mode in headless Chromium. Screenshots end up in `test/e2e/output/`. All tests run in GitHub Actions for every pull request. See [`test/README.md`](test/README.md) for details.
 
 ### Security Notes
 
 This module uses dependency overrides to mitigate known security vulnerabilities in transitive dependencies:
-- **axios**: Overridden to `^1.13.1` (fixes CSRF, SSRF, and DoS vulnerabilities)
+- **axios**: Overridden to `^1.13.1` (fixes CSRF, SSRF, and DoS vulnerabilities; the lockfile currently resolves 1.20.0)
 - **xml2js**: Overridden to `^0.6.2` (fixes prototype pollution vulnerability)
 - **ip**: Overridden to `^2.0.1` (latest available version)
 
@@ -481,7 +485,8 @@ This module uses dependency overrides to mitigate known security vulnerabilities
 
 ## Troubleshooting
 
-- Set `debug: true` to inspect what happens in both the browser module and the node helper (visible in the MagicMirror console).
+- Set `debug: true` to inspect what happens in both the browser module and the node helper (visible in the MagicMirror console). The debug log includes the raw track data from each speaker (`Raw track object`), which is the most useful thing to include when reporting that a service shows the wrong title or source.
+- Running several MMM-Sonos instances (e.g. a row and a fullscreen one)? They share one node helper. Each instance applies its own `allowedSpeakers`, `hiddenSpeakers`, `showWhenPaused` and `maxGroups`; features such as `albumArtColors` are fetched when any instance enables them.
 - Increase `discoveryTimeout` if no players are found. On mesh networks 10000–15000 ms is sometimes required.
 - Run `npm install` again whenever dependencies appear to be missing.
 - Missing album art? Try `forceHttps: true` if MagicMirror runs over HTTPS and the browser blocks plain HTTP images.

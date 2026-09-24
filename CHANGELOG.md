@@ -7,53 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-24
+
 ### Added
-- **Continuous integration** — a GitHub Actions workflow runs lint and unit tests on Node 22 and 24 for every push to `master` and every pull request, plus a dependency audit that fails on critical advisories.
-- **Unit tests now exercise the real module code** — `test/helpers/load-module.js` loads the actual `node_helper.js` (with MagicMirror's `node_helper`/`logger` stubbed) and `MMM-Sonos.js` (via a sandboxed `Module.register`). Previously the tests ran against hand-copied versions of each function, so changes to the module were not covered. Frontend tests live in `test/frontend.test.js`.
-- **`cardMaxWidth` option** (default: `null`) — sets a maximum width for each card, complementing `cardMinWidth`. Useful in row mode to prevent very wide cards when content is short and text wrapping is enabled. Example: `cardMaxWidth: 300` or `cardMaxWidth: '300px'`.
-
-### Fixed
-- **Track title missing for Apple Music and Amazon Music (#53)** — on-demand tracks from these services (track URIs starting with `x-sonosapi-hls-static:`) were detected as radio, so the album name was shown in place of the track title (and twice with `showAlbum: true`). Only real radio stream URIs are treated as radio now, and Apple Music/Spotify are also recognised by their Sonos service id. Local files whose path contains "/radio" (e.g. *Radiohead*) are no longer detected as radio either.
-- **Fullscreen mode showed "No speakers are visible" with `allowedSpeakers`/`hiddenSpeakers`** — the fullscreen card always used the first group (alphabetically), even when that group was filtered out for the instance, so nothing was shown although an allowed speaker was playing. It now picks the first group the instance actually shows (and skips paused groups unless `showWhenPaused` is on). A pinned `fullscreenSpeaker` is still honoured.
-- **`maxGroups` counted hidden and paused groups** — the limit was applied before the per-instance filters (and additionally in `node_helper`), so hidden groups could use up the slots and push allowed groups out. The limit is now applied after filtering, per instance.
-- **Settings of one module instance switched features off for another** — all MMM-Sonos instances share one `node_helper`, which only kept the config it received last. With e.g. a row instance and a fullscreen instance, `albumArtColors`, `showWhenPaused` and `hiddenSpeakers`/`hiddenGroups` from one instance applied to all of them, depending on load order. `node_helper` now remembers each instance's config and combines them (a feature is fetched if any instance enables it; a speaker is dropped only if every instance hides it). Each instance still applies its own filters.
-- **Stale cards and a `replaceChild` error after the playing set changed** — when a group stopped or appeared, the full re-render was debounced, but every new data update restarted the timer while per-card updates kept patching the old DOM. The old card could stay visible for several update cycles, and a per-card swap could throw `Failed to execute 'replaceChild'` once the full render replaced the card. A scheduled re-render is no longer postponed, data that arrives while it is pending or animating is rendered afterwards, and per-card swaps skip cards that were already replaced.
-- **Album art downloads could hang a refresh** — downloads now time out after 10 seconds, follow relative redirects, and never leave partial files behind.
-- **Room name lookup never ran** — `_inferCoordinatorName()` treated the `deviceDescription` method as the description itself. It now fetches the description, and only when the group data has no name.
-- `node_helper` no longer logs the complete configuration on every (re)connect; it is logged only with `debug: true`.
-
-### Security
-- Applied non-breaking `npm audit` fixes to the lockfile (axios 1.13.1 → 1.20.0, follow-redirects, form-data, brace-expansion).
-
-### Changed
-- **Far fewer requests to the Sonos system** — each module instance requested data on its own timer in addition to `node_helper`'s own timer, and every request polled all speakers again. With four instances that was about 105 SOAP calls every 5 seconds for a 5-room setup; it is now 17. Requests are answered from data younger than `updateInterval`, overlapping refreshes are merged into one, and the position/duration already returned with the current track is reused instead of being fetched a second time per group.
-- **`wrapText: true` + `maxTextLines` now works correctly in row mode** — cards in row mode now use a fixed width equal to `cardMinWidth` (instead of growing freely to fit content). This means long titles wrap to `maxTextLines` lines as intended, rather than extending the card horizontally.
-- **`showPlaybackState` badge is now shown on the same line as the speaker name** — previously the state ("Playing", "Paused") appeared below the name in a separate row; it is now displayed inline to the right of the name.
-- **Track changes only animate the affected card** — transitions between playing-like states (PLAYING ↔ TRANSITIONING ↔ BUFFERING) during a track change no longer trigger a full module re-render. Only the card whose track actually changed animates.
-- **Full-module animation is debounced** — rapid successive data updates (e.g. on page load or media change) are now collapsed into a single animation, preventing the 2–3 reload flashes previously seen.
-- **Eliminated double-refresh on reconnect** — `node_helper._configure()` previously called `_refresh()` twice when the coordinator was already known (once immediately, once at the end of the function). The duplicate call is now skipped.
-
-### Fixed
 - **Fullscreen mode** (`displayMode: 'fullscreen'`) — renders a single speaker's now-playing info as a large, full-width card with prominent album art (configurable via `fullscreenAlbumArtSize`, default: 300 px). Ideal for a dedicated MagicMirror page.
   - New `fullscreenSpeaker` option — pin the card to a specific speaker by name, group name, group ID, or coordinator IP; defaults to the first currently-playing group when `null`
   - New `fullscreenAlbumArtSize` option (default: `300`) — album art size in pixels for fullscreen mode
   - New `fullscreenWidth` option (default: `null`) — optional max-width constraint for the fullscreen wrapper
   - All standard display options (`showAlbum`, `showProgress`, `showVolume`, `showGroupMembers`, `albumArtColors`, `transitionAnimation`, etc.) work in fullscreen mode
-- **Dual-mode independence** — each module instance now scopes all in-place DOM operations (per-card animation, progress bar updates, volume updates) to its own wrapper via `data-module-id`. Previously, `document.querySelector` would find elements from the first matching instance in the document, causing cross-instance interference.
-
-### Changed
-- Per-card track-change animation now works correctly in **all** display modes including `fullscreen`; only the affected card animates — structural changes still trigger a full re-render
-- `--mmm-sonos-gap` default increased from `0.65rem` to `0.75rem` for slightly more breathing room between cards in row and grid modes
-- Card `flex-basis` is no longer set via inline style — the CSS class (`flex: 1 1 var(--mmm-sonos-card-min)`) now controls it in all non-row modes. In row mode (`flex: 0 0 auto`) this prevents long titles from overflowing a fixed-width card and visually overlapping adjacent cards.
-- README updated: Highlights, Configuration Examples, Configuration table, and Additional features reflect fullscreen mode and all new options
-
-### Fixed
-- **Grid/auto mode card overlap:** In `grid` and `auto` (when resolving to grid) display modes, cards overflowed their grid cells and overlapped adjacent cards. Root cause: `.mmm-sonos--mode-grid .mmm-sonos__group { width: 100% }` used the default `box-sizing: content-box`, making the total rendered card width equal to the grid column width *plus* both horizontal padding values (2 × 0.65 rem ≈ 20.8 px). With `justify-items: center`, each card extended 0.65 rem beyond its cell on each side; since the grid gap is only 0.75 rem, neighbouring cards overlapped by ~0.55 rem (~8.8 px). Fixed by adding `box-sizing: border-box` to `.mmm-sonos--mode-grid .mmm-sonos__group` so padding is included in the `width: 100%` calculation.
-- **Normal mode + mini mode dual-instance bug (Issues 1 & 2):** When both a normal-mode and a mini-mode instance were active simultaneously, `document.querySelector('[data-group-id="..."]')` found the first matching element in the entire document instead of the element belonging to the calling instance. This caused the normal-mode instance to replace mini-mode cards with full-size cards on track changes (mini grew to normal size), and left the normal-mode cards stale (no visible track-change update). Fixed by scoping all in-place DOM queries to `[data-module-id]`, a unique attribute set on each module wrapper in `getDom()`.
-- **Slow initial load (Issue 3):** When the frontend reconnected and sent `SONOS_CONFIG`, `node_helper._configure()` always ran a full 5-second Sonos re-discovery even if a coordinator was already known from the startup phase. Now, if a coordinator is already set, data is served immediately and re-discovery runs silently in the background, eliminating the startup stall.
-- **Layout overlap in row/grid mode (Issue 4):** Setting `container.style.flexBasis` to the card's `cardMinWidth` as an inline style overrode the mode-specific CSS `flex` shorthand. In row mode (`flex: 0 0 auto`, which sets `flex-basis: auto`), the inline override fixed the card at exactly 150 px; content wider than that (long titles, artist names) overflowed the card boundary and visually overlapped the adjacent card. Removed the inline `flexBasis` override so the CSS controls flex behaviour correctly in every mode.
-
-### Added (previous entries)
 - **Mini mode** (`displayMode: 'mini'`) — compact single-row cards showing a small thumbnail, group name badge, track title, and optional artist; ideal for a small corner of the display
   - New `miniAlbumArtSize` option (default: `40`) — thumbnail size in pixels
   - New `miniShowGroupName` option (default: `true`) — show room name badge
@@ -75,18 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Improved radio metadata** — station name, station logo, and live stream content ("now playing") are retrieved from the Sonos AVTransport `GetMediaInfo`/`GetPositionInfo` APIs for richer radio display
 - **Radio art fallback** — a `/getaa` URL is built from the stream URI when no artwork is reported, giving a station logo in more cases
 - **Album art image error handling** — broken image URLs now hide the art wrapper instead of showing a broken-image icon
-- **Unit tests for new functions** — `_parseDIDL`, `_buildRadioArtUrl`, updated `_detectSource`, and `_isHidden` (whitelist logic) are covered; total tests: 78
-
-### Changed
-- `_detectSource` now checks URI patterns before `track.type` (more reliable); generic types `'track'` and `'audio'` are ignored as they do not carry useful source info
-- `_isHidden` now also checks `coordinatorHost` against `hiddenSpeakers`, supports `allowedGroups` and `allowedSpeakers` whitelists, and is covered by unit tests
-- `displayMode` now accepts `'mini'` in addition to `'auto'`, `'grid'`, and `'row'`
-- Group data emitted by `node_helper` now includes `coordinatorHost`, `stationName`, and `streamTitle` fields
-- Per-card track-change animation now works in **all** display modes (mini, row, grid); only the affected card animates — structural changes still trigger a full re-render
-- Volume changes no longer trigger a track-change animation; the volume label updates silently in-place
-- Album art images now use `loading="eager"` so they start loading immediately when inserted into the DOM, reducing the blank-art flash during track transitions
-- New album art is preloaded (via `new Image()`) during the out-animation phase so the image is browser-cached when the new card appears
-- README updated: Highlights, Complete Configuration example, Configuration table, and Additional features all reflect the new options
+- **`cardMaxWidth` option** (default: `null`) — sets a maximum width for each card, complementing `cardMinWidth`. Useful in row mode to prevent very wide cards when content is short and text wrapping is enabled. Example: `cardMaxWidth: 300` or `cardMaxWidth: '300px'`.
 - **Album art local caching** - Album art images are now downloaded and cached locally for faster loading on slower networks
   - New `cacheAlbumArt` config option (default: `true`) to enable/disable caching
   - New `albumArtCacheTTL` config option (default: 30 days) — set to `0` to cache forever (no expiry)
@@ -98,11 +48,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Falls back gracefully to the original URL if caching fails
   - Support for on-demand cache clearing via `SONOS_CLEAR_CACHE` socket notification
   - Public `clearAlbumArtCache()` method callable from the browser console
-- **Unit test suite** - Added test infrastructure using Node.js built-in `node:test` runner
-  - Tests cover `_pick`, `_parseTimeToSeconds`, `_normalizeArt`, `_generateCacheKey`, `_isTvTrack`, `_detectSource`, `_parseDIDL`, `_buildRadioArtUrl`, `_isHidden`, and filesystem cache logic
-  - Run with `npm test`
+- **Continuous integration** — a GitHub Actions workflow runs lint and unit tests on Node 22 and 24 for every push to `master` and every pull request, plus a dependency audit that fails on critical advisories.
+- **Test suite** — unit tests (`npm test`) now load the real `node_helper.js` and `MMM-Sonos.js` instead of hand-copied functions (which had drifted from the real code), plus integration tests that run `node_helper` and the `sonos` package against a **Sonos simulator**, and an **end-to-end test** (`npm run test:e2e`) that runs the module in a real MagicMirror² with four display modes in headless Chromium and saves screenshots. See `test/README.md`.
+
+### Changed
+- **Far fewer requests to the Sonos system** — each module instance requested data on its own timer in addition to `node_helper`'s own timer, and every request polled all speakers again. With four instances that was about 105 SOAP calls every 5 seconds for a 5-room setup; it is now 17. Requests are answered from data younger than `updateInterval`, overlapping refreshes are merged into one, and the position/duration already returned with the current track is reused instead of being fetched a second time per group.
+- **`wrapText: true` + `maxTextLines` now works correctly in row mode** — cards in row mode now use a fixed width equal to `cardMinWidth` (instead of growing freely to fit content). This means long titles wrap to `maxTextLines` lines as intended, rather than extending the card horizontally.
+- **`showPlaybackState` badge is now shown on the same line as the speaker name** — previously the state ("Playing", "Paused") appeared below the name in a separate row; it is now displayed inline to the right of the name.
+- **Track changes only animate the affected card** — transitions between playing-like states (PLAYING ↔ TRANSITIONING ↔ BUFFERING) during a track change no longer trigger a full module re-render. Only the card whose track actually changed animates.
+- **Full-module animation is debounced** — rapid successive data updates (e.g. on page load or media change) are now collapsed into a single animation, preventing the 2–3 reload flashes previously seen.
+- **Eliminated double-refresh on reconnect** — `node_helper._configure()` previously called `_refresh()` twice when the coordinator was already known (once immediately, once at the end of the function). The duplicate call is now skipped.
+- Per-card track-change animation now works correctly in **all** display modes including `fullscreen`; only the affected card animates — structural changes still trigger a full re-render
+- `--mmm-sonos-gap` default increased from `0.65rem` to `0.75rem` for slightly more breathing room between cards in row and grid modes
+- Card `flex-basis` is no longer set via inline style — the CSS class (`flex: 1 1 var(--mmm-sonos-card-min)`) now controls it in all non-row modes. In row mode (`flex: 0 0 auto`) this prevents long titles from overflowing a fixed-width card and visually overlapping adjacent cards.
+- README updated: Highlights, Configuration Examples, Configuration table, and Additional features reflect fullscreen mode and all new options
+- `_detectSource` now checks URI patterns before `track.type` (more reliable); generic types `'track'` and `'audio'` are ignored as they do not carry useful source info
+- `_isHidden` now also checks `coordinatorHost` against `hiddenSpeakers`, supports `allowedGroups` and `allowedSpeakers` whitelists, and is covered by unit tests
+- `displayMode` now accepts `'mini'` in addition to `'auto'`, `'grid'`, and `'row'`
+- Group data emitted by `node_helper` now includes `coordinatorHost`, `stationName`, and `streamTitle` fields
+- Per-card track-change animation now works in **all** display modes (mini, row, grid); only the affected card animates — structural changes still trigger a full re-render
+- Volume changes no longer trigger a track-change animation; the volume label updates silently in-place
+- Album art images now use `loading="eager"` so they start loading immediately when inserted into the DOM, reducing the blank-art flash during track transitions
+- New album art is preloaded (via `new Image()`) during the out-animation phase so the image is browser-cached when the new card appears
+- README updated: Highlights, Complete Configuration example, Configuration table, and Additional features all reflect the new options
 
 ### Fixed
+- **Track title missing for Apple Music and Amazon Music (#53)** — on-demand tracks from these services (track URIs starting with `x-sonosapi-hls-static:`) were detected as radio, so the album name was shown in place of the track title (and twice with `showAlbum: true`). Only real radio stream URIs are treated as radio now, and Apple Music/Spotify are also recognised by their Sonos service id. Local files whose path contains "/radio" (e.g. *Radiohead*) are no longer detected as radio either.
+- **Fullscreen mode showed "No speakers are visible" with `allowedSpeakers`/`hiddenSpeakers`** — the fullscreen card always used the first group (alphabetically), even when that group was filtered out for the instance, so nothing was shown although an allowed speaker was playing. It now picks the first group the instance actually shows (and skips paused groups unless `showWhenPaused` is on). A pinned `fullscreenSpeaker` is still honoured.
+- **`maxGroups` counted hidden and paused groups** — the limit was applied before the per-instance filters (and additionally in `node_helper`), so hidden groups could use up the slots and push allowed groups out. The limit is now applied after filtering, per instance.
+- **Settings of one module instance switched features off for another** — all MMM-Sonos instances share one `node_helper`, which only kept the config it received last. With e.g. a row instance and a fullscreen instance, `albumArtColors`, `showWhenPaused` and `hiddenSpeakers`/`hiddenGroups` from one instance applied to all of them, depending on load order. `node_helper` now remembers each instance's config and combines them (a feature is fetched if any instance enables it; a speaker is dropped only if every instance hides it). Each instance still applies its own filters.
+- **Stale cards and a `replaceChild` error after the playing set changed** — when a group stopped or appeared, the full re-render was debounced, but every new data update restarted the timer while per-card updates kept patching the old DOM. The old card could stay visible for several update cycles, and a per-card swap could throw `Failed to execute 'replaceChild'` once the full render replaced the card. A scheduled re-render is no longer postponed, data that arrives while it is pending or animating is rendered afterwards, and per-card swaps skip cards that were already replaced.
+- **Album art downloads could hang a refresh** — downloads now time out after 10 seconds, follow relative redirects, and never leave partial files behind.
+- **Room name lookup never ran** — `_inferCoordinatorName()` treated the `deviceDescription` method as the description itself. It now fetches the description, and only when the group data has no name.
+- `node_helper` no longer logs the complete configuration on every (re)connect; it is logged only with `debug: true`.
+- **Dual-mode independence** — each module instance now scopes all in-place DOM operations (per-card animation, progress bar updates, volume updates) to its own wrapper via `data-module-id`. Previously, `document.querySelector` would find elements from the first matching instance in the document, causing cross-instance interference.
+- **Grid/auto mode card overlap:** In `grid` and `auto` (when resolving to grid) display modes, cards overflowed their grid cells and overlapped adjacent cards. Root cause: `.mmm-sonos--mode-grid .mmm-sonos__group { width: 100% }` used the default `box-sizing: content-box`, making the total rendered card width equal to the grid column width *plus* both horizontal padding values (2 × 0.65 rem ≈ 20.8 px). With `justify-items: center`, each card extended 0.65 rem beyond its cell on each side; since the grid gap is only 0.75 rem, neighbouring cards overlapped by ~0.55 rem (~8.8 px). Fixed by adding `box-sizing: border-box` to `.mmm-sonos--mode-grid .mmm-sonos__group` so padding is included in the `width: 100%` calculation.
+- **Normal mode + mini mode dual-instance bug (Issues 1 & 2):** When both a normal-mode and a mini-mode instance were active simultaneously, `document.querySelector('[data-group-id="..."]')` found the first matching element in the entire document instead of the element belonging to the calling instance. This caused the normal-mode instance to replace mini-mode cards with full-size cards on track changes (mini grew to normal size), and left the normal-mode cards stale (no visible track-change update). Fixed by scoping all in-place DOM queries to `[data-module-id]`, a unique attribute set on each module wrapper in `getDom()`.
+- **Slow initial load (Issue 3):** When the frontend reconnected and sent `SONOS_CONFIG`, `node_helper._configure()` always ran a full 5-second Sonos re-discovery even if a coordinator was already known from the startup phase. Now, if a coordinator is already set, data is served immediately and re-discovery runs silently in the background, eliminating the startup stall.
+- **Layout overlap in row/grid mode (Issue 4):** Setting `container.style.flexBasis` to the card's `cardMinWidth` as an inline style overrode the mode-specific CSS `flex` shorthand. In row mode (`flex: 0 0 auto`, which sets `flex-basis: auto`), the inline override fixed the card at exactly 150 px; content wider than that (long titles, artist names) overflowed the card boundary and visually overlapped the adjacent card. Removed the inline `flexBasis` override so the CSS controls flex behaviour correctly in every mode.
 - Removed duplicate `_shouldUpdateDom` method definition that caused an ESLint `no-dupe-keys` error
 - Fixed unnecessary regex escape `\/` in `_parseDIDL` (ESLint `no-useless-escape`)
 - Fixed progress bar stuttering by eliminating unnecessary DOM re-renders
@@ -112,9 +95,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed spurious animations when only volume changes (e.g. automated volume adjustments)
 - Fixed all speakers animating when only one speaker's track changes in row/grid mode
 - Fixed progress bar not appearing when a track first starts (position reported as `0:00:00`)
-  - `_parseTimeToSeconds('0:00:00')` now correctly returns `0` instead of `null`; only `NOT_IMPLEMENTED` (no position support) returns `null`
+  - A position of `0:00:00` is now treated as `0` instead of unknown; only `NOT_IMPLEMENTED` (no position support) means unknown
   - `_renderGroup` now shows the progress bar as long as `duration > 0`, even when `position` is `null` or `0`
   - `_updateProgressDataFromServer` now updates the bar dataset for `position = 0` and uses a class-agnostic selector so it works in both regular and mini display modes
+
+### Security
+- Applied non-breaking `npm audit` fixes to the lockfile (axios 1.13.1 → 1.20.0, follow-redirects, form-data, brace-expansion).
 
 ## [1.3.0] - 2026-01-08
 
