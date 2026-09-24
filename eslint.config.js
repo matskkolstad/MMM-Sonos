@@ -47,5 +47,14 @@ module.exports = [
         ...globals.node
       }
     }
+  },
+  {
+    // page.evaluate() callbacks in the end-to-end test run in the browser
+    files: ['test/e2e/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.browser
+      }
+    }
   }
 ];

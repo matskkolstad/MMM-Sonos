@@ -1,0 +1,72 @@
+{
+  "description": "Five rooms playing from different sources. Kitchen plays Apple Music (issue #53), Bedroom plays TuneIn radio, Living Room + Hallway are grouped on Spotify, Office is on TV and Bathroom is idle.",
+  "speakers": [
+    { "uuid": "RINCON_SIM000000000001400", "name": "Kitchen", "port": 1400 },
+    { "uuid": "RINCON_SIM000000000001401", "name": "Living Room", "port": 1401 },
+    { "uuid": "RINCON_SIM000000000001402", "name": "Hallway", "port": 1402 },
+    { "uuid": "RINCON_SIM000000000001403", "name": "Bedroom", "port": 1403 },
+    { "uuid": "RINCON_SIM000000000001404", "name": "Office", "port": 1404 },
+    { "uuid": "RINCON_SIM000000000001405", "name": "Bathroom", "port": 1405 }
+  ],
+  "groups": [
+    {
+      "coordinator": "RINCON_SIM000000000001400",
+      "state": "playing",
+      "volume": 25,
+      "track": {
+        "uri": "x-sonosapi-hls-static:song%3a1440818839?sid=204&flags=8224&sn=3",
+        "title": "Blinding Lights",
+        "artist": "The Weeknd",
+        "album": "After Hours",
+        "art": "red",
+        "duration": 200,
+        "position": 42
+      },
+      "media": {
+        "uri": "x-rincon-queue:RINCON_SIM000000000001400#0"
+      }
+    },
+    {
+      "coordinator": "RINCON_SIM000000000001401",
+      "members": ["RINCON_SIM000000000001401", "RINCON_SIM000000000001402"],
+      "state": "playing",
+      "volume": 30,
+      "track": {
+        "uri": "x-sonos-spotify:spotify%3atrack%3a3n3Ppam7vgaVa1iaRUc9Lp?sid=12&flags=8224&sn=7",
+        "title": "Mr. Brightside",
+        "artist": "The Killers",
+        "album": "Hot Fuss",
+        "art": "blue",
+        "duration": 222,
+        "position": 95
+      }
+    },
+    {
+      "coordinator": "RINCON_SIM000000000001403",
+      "state": "playing",
+      "volume": 12,
+      "track": {
+        "uri": "x-sonosapi-stream:s24896?sid=254&flags=8224&sn=0",
+        "title": "x-sonosapi-stream:s24896?sid=254&flags=8224&sn=0",
+        "streamContent": "Sigrid - Burning Bridges",
+        "class": "object.item",
+        "duration": 0
+      },
+      "media": {
+        "uri": "x-sonosapi-stream:s24896?sid=254&flags=8224&sn=0",
+        "title": "NRK P3",
+        "art": "green"
+      }
+    },
+    {
+      "coordinator": "RINCON_SIM000000000001404",
+      "state": "playing",
+      "volume": 40,
+      "track": {
+        "uri": "x-sonos-htastream:RINCON_SIM000000000001404:spdif",
+        "metadata": false,
+        "duration": 0
+      }
+    }
+  ]
+}

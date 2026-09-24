@@ -32,6 +32,29 @@ jobs:
       - run: npm run lint
       - run: npm test
 
+  e2e:
+    name: End-to-end (MagicMirror² + Sonos simulator)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      # Installs MagicMirror² (server only) and playwright-core into .e2e/, then runs
+      # the module against the simulated speakers in the runner's preinstalled Chrome.
+      - run: npm run test:e2e
+        env:
+          CHROMIUM_PATH: /usr/bin/google-chrome
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-screenshots
+          path: test/e2e/output/
+          if-no-files-found: ignore
+
   audit:
     name: Dependency audit
     runs-on: ubuntu-latest
