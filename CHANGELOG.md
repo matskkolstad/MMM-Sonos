@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Touch control mode** (`enableControls: true`, by [@AndreasHagman](https://github.com/AndreasHagman) in #68) — tap a card to open a control overlay with play/pause, group volume, per-speaker volume, grouping/ungrouping of speakers and your Sonos favorites. Idle speakers are shown as cards (`controlShowIdleZones`) or behind a "+" tile. New options: `enableControls`, `controlShowIdleZones`, `favoritesRefreshInterval`, `maxFavorites`, `controlVolumeStep`. Off by default; nothing changes for existing setups.
+- End-to-end test for touch control mode, and control actions in the Sonos simulator.
+
+### Fixed
+- The progress bar of a paused track no longer keeps counting up (#68).
+- Missing translations fell back to Afrikaans (the first language listed) instead of English, showing raw keys such as `SPEAKERS` in languages without the new texts. English is now the fallback; the Norwegian translation is complete.
+
 ## [1.4.0] - 2026-09-24
 
 ### Added

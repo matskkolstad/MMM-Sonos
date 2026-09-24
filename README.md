@@ -425,34 +425,31 @@ With `enableControls: true`:
 - Favorites come directly from what you've saved in the Sonos app
   (via Sonos' own favorites list) — there is no separate config-defined
   station list to maintain.
-- If you leave the module's `header` config unset, MMM-Sonos picks a
-  heading that matches what's actually on screen: "Sonos" when idle zones
-  are shown alongside playing ones, or "Now Playing" when
-  `controlShowIdleZones: false` limits the view to zones that are actually
-  playing. A `header` you set yourself is always used as-is.
+- The overlays follow the module's look (fonts, colours, `fontScale` /
+  `textSize`), and every label is translated.
+
+> **Security note:** anyone who can open your MagicMirror² page in a browser
+> can control your speakers while `enableControls` is on. Keep
+> `ipWhitelist` / `address` in your MagicMirror config restricted to devices
+> you trust (the default only allows the mirror itself).
 
 #### Screenshots
 
-**Idle zone card:**
+**Cards with idle speakers (`controlShowIdleZones: true`):**
 
-<img width="877" height="462" alt="Touch control mode - idle zone card" src="https://github.com/user-attachments/assets/dcfb449a-d50f-43ce-b934-5206cded1fa9" />
+![Touch control mode – cards with idle speakers](docs/touch-cards.png)
 
-**Control overlay (play/pause, volume):**
+**Control overlay (play/pause, group and per-speaker volume, favorites):**
 
-<img width="781" height="805" alt="Touch control mode - control overlay" src="https://github.com/user-attachments/assets/cbdf7528-bacb-40fb-a39f-9e317973b2a7" />
+![Touch control mode – control overlay](docs/touch-overlay.png)
 
-**Favorites list:**
+**Speakers picker (group / ungroup):**
 
-<img width="802" height="771" alt="Touch control mode - favorites list" src="https://github.com/user-attachments/assets/19a30291-2202-4eb3-86b6-af6714acae4b" />
+![Touch control mode – speakers picker](docs/touch-speakers.png)
 
-**"+" more-speakers button (`controlShowIdleZones: false`, idle zones hidden):**
+**"+" tile for idle speakers (`controlShowIdleZones: false`):**
 
-<img width="455" height="432" alt="Touch control mode - more speakers button" src="https://github.com/user-attachments/assets/7a92e10c-cd63-4662-97de-d828c29ed312" />
-
-**More speakers list (tapping the "+" button):**
-
-<img width="867" height="365" alt="Touch control mode - more speakers list" src="https://github.com/user-attachments/assets/f2135836-1612-47ad-9c36-9cb5076d217d" />
-
+![Touch control mode – more speakers tile](docs/touch-more-speakers-button.png)
 
 **Touch control mode option reference:**
 
@@ -466,17 +463,12 @@ With `enableControls: true`:
 
 #### Known limitations
 
-- `maxGroups` (default `6`) still caps how many zones are shown in control
-  mode too — a household with more than `maxGroups` zones will have some
-  zones missing from the control surface entirely, with no indication.
-  Raise `maxGroups` if you have more zones than that and want them all
-  controllable.
-- Combining `enableControls: true` with `displayMode: 'fullscreen'`, or
-  running a second `MMM-Sonos` instance alongside a control-mode instance,
-  isn't fully supported yet — fullscreen's zone-selection logic doesn't yet
-  account for control mode's widened zone set, so it can end up showing
-  "nothing visible" while music is actually playing on another zone. Stick
-  to `row`/`grid` for the control-mode instance for now.
+- `maxGroups` (default `6`) also limits how many cards control mode shows.
+  Raise it if you have more zones than that; idle speakers behind the "+"
+  tile are not limited.
+- Favorites are played by their stream address. Radio stations work; some
+  playlists or service favorites may need metadata the `sonos` library does
+  not expose yet — please report any favorite that does not start.
 
 ## Additional features
 
@@ -620,8 +612,6 @@ Some ideas for future improvements:
 - Skip to the next/previous track directly from the control overlay, not just play/pause.
 - Add a sleep timer — automatically pause playback after N minutes.
 - Add a mute button per speaker, in addition to the volume slider.
-- Make `enableControls` work correctly with `displayMode: 'fullscreen'` (today it can show "nothing playing" even when music is playing on another zone).
-- Don't let `maxGroups` silently limit the control surface the way it limits the passive display.
 - Show a small icon per favorite indicating its type (radio, playlist, stream).
 
 ## License
