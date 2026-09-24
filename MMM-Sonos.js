@@ -25,7 +25,7 @@ Module.register('MMM-Sonos', {
     showPlaybackState: false,
     showLastUpdated: false,
     timeFormat24: true,
-  dateLocale: 'en-US',
+    dateLocale: 'en-US',
     maxTextLines: 2,
     accentuateActive: true,
     showAlbum: false,
@@ -79,7 +79,7 @@ Module.register('MMM-Sonos', {
     this._fullUpdateInProgress = false;
     this._rerenderAfterFullUpdate = false;
 
-  this._log('Starting MMM-Sonos module');
+    this._log('Starting MMM-Sonos module');
     // instanceId lets node_helper keep each instance's settings apart (it is shared).
     this.sendSocketNotification('SONOS_CONFIG', { ...this.config, instanceId: this.identifier });
     this.scheduleRefresh();
@@ -115,13 +115,13 @@ Module.register('MMM-Sonos', {
     }
 
     this.updateTimer = setInterval(() => {
-  this._log('Requesting update from node_helper');
+      this._log('Requesting update from node_helper');
       this.sendSocketNotification('SONOS_REQUEST');
     }, Math.max(this.config.updateInterval, 5000));
   },
 
   socketNotificationReceived(notification, payload) {
-  this._log('Received socket notification', notification);
+    this._log('Received socket notification', notification);
 
     switch (notification) {
       case 'SONOS_DATA': {
@@ -314,9 +314,9 @@ Module.register('MMM-Sonos', {
       return wrapper;
     }
 
-  const displayMode = this._resolveDisplayMode();
-  wrapper.classList.add(`mmm-sonos--mode-${displayMode}`);
-  this._applyLayoutMode(wrapper, displayMode, cardMinValue, gridColumns);
+    const displayMode = this._resolveDisplayMode();
+    wrapper.classList.add(`mmm-sonos--mode-${displayMode}`);
+    this._applyLayoutMode(wrapper, displayMode, cardMinValue, gridColumns);
 
     const isMiniMode = displayMode === 'mini';
     const isFullscreenMode = displayMode === 'fullscreen';

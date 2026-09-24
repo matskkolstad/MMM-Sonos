@@ -13,6 +13,7 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
+const http = require('node:http');
 
 const { loadNodeHelper } = require('./helpers/load-module');
 
@@ -490,5 +491,88 @@ describe('_mergeInstanceConfig() – several MMM-Sonos instances share one node_
     const helper = loadNodeHelper();
     helper._mergeInstanceConfig({ albumArtColors: true }); // fallback read from config.js
     assert.equal(helper._mergeInstanceConfig({ instanceId: 'a', albumArtColors: false }).albumArtColors, false);
+  });
+});
+
+describe('_downloadFile()', () => {
+  let server;
+  let baseUrl;
+  let tmpDir;
+  const helper = loadNodeHelper();
+
+  before(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mmm-sonos-dl-'));
+    server = http.createServer((req, res) => {
+      if (req.url === '/art.png') {
+        res.writeHead(200, { 'Content-Type': 'image/png' });
+        res.end('image-bytes');
+      } else if (req.url === '/relative-redirect') {
+        res.writeHead(302, { Location: '/art.png' });
+        res.end();
+      } else if (req.url === '/missing') {
+        res.writeHead(404);
+        res.end();
+      } else if (req.url === '/hang') {
+        // never answers
+      } else if (req.url === '/stall-body') {
+        res.writeHead(200, { 'Content-Type': 'image/png' });
+        res.write('partial');
+        // never ends
+      }
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    baseUrl = `http://127.0.0.1:${server.address().port}`;
+  });
+
+  after(async () => {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('downloads a file', async () => {
+    const dest = path.join(tmpDir, 'ok.png');
+    await helper._downloadFile(`${baseUrl}/art.png`, dest);
+    assert.equal(fs.readFileSync(dest, 'utf8'), 'image-bytes');
+  });
+
+  it('follows a relative redirect', async () => {
+    const dest = path.join(tmpDir, 'redirected.png');
+    await helper._downloadFile(`${baseUrl}/relative-redirect`, dest);
+    assert.equal(fs.readFileSync(dest, 'utf8'), 'image-bytes');
+  });
+
+  it('rejects on HTTP errors and leaves no files behind', async () => {
+    const dest = path.join(tmpDir, 'missing.png');
+    await assert.rejects(helper._downloadFile(`${baseUrl}/missing`, dest), /HTTP 404/);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(fs.existsSync(dest), false);
+    assert.equal(fs.existsSync(`${dest}.tmp`), false);
+  });
+
+  it('times out when the server never answers', async () => {
+    const dest = path.join(tmpDir, 'hang.png');
+    await assert.rejects(helper._downloadFile(`${baseUrl}/hang`, dest, 200), /timed out/);
+  });
+
+  it('times out when the body stalls halfway', async () => {
+    const dest = path.join(tmpDir, 'stall.png');
+    await assert.rejects(helper._downloadFile(`${baseUrl}/stall-body`, dest, 200));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(fs.existsSync(dest), false);
+  });
+});
+
+describe('_inferCoordinatorName()', () => {
+  const helper = loadNodeHelper();
+
+  it('uses the room name from the device description', async () => {
+    const coordinator = { host: '192.168.1.10', deviceDescription: async () => ({ roomName: 'Kitchen' }) };
+    assert.equal(await helper._inferCoordinatorName(coordinator), 'Kitchen');
+  });
+
+  it('falls back to the host when the description cannot be fetched', async () => {
+    const coordinator = { host: '192.168.1.10', deviceDescription: async () => { throw new Error('offline'); } };
+    assert.equal(await helper._inferCoordinatorName(coordinator), '192.168.1.10');
   });
 });

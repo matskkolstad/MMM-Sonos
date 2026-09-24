@@ -11,6 +11,7 @@ const http = require('node:http');
 const { Vibrant } = require('node-vibrant/node');
 
 const MAX_REDIRECTS = 5;
+const DOWNLOAD_TIMEOUT_MS = 10 * 1000;
 const DEFAULT_CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
 
 // Track URI prefixes Sonos uses for live radio streams.
@@ -108,7 +109,6 @@ module.exports = NodeHelper.create({
   },
 
   async _configure(config) {
-  Log.log(`[MMM-Sonos] Received config: ${JSON.stringify(config)}`);
     this.config = Object.assign(
       {
         updateInterval: 15 * 1000,
@@ -186,7 +186,7 @@ module.exports = NodeHelper.create({
     }
 
     this.isDiscovering = true;
-  this.sendDebug('Starting Sonos discovery');
+    this.sendDebug('Starting Sonos discovery');
 
     try {
       if (this.config.discoveryTimeout !== 0) {
@@ -306,7 +306,7 @@ module.exports = NodeHelper.create({
       });
     } catch (error) {
       this.sendError('Failed to fetch Sonos data', error);
-      this.coordinator = null; // Tving re-discovery
+      this.coordinator = null; // Force re-discovery on the next refresh
     }
   },
 
@@ -520,7 +520,8 @@ module.exports = NodeHelper.create({
           accentColor = await this._extractAccentColor(artFilePath);
         }
 
-        const coordinatorName = await this._inferCoordinatorName(coordinator);
+        // Only ask the speaker for its room name when the group data lacks one.
+        const coordinatorName = (!name || !members.length) ? await this._inferCoordinatorName(coordinator) : null;
         formatted.push({
           id: id || coordinator.uuid || coordinator.host,
           name: name || coordinatorName || 'Sonos',
@@ -583,7 +584,7 @@ module.exports = NodeHelper.create({
       return null;
     }
     try {
-      const description = coordinator.deviceDescription || (await coordinator.deviceDescription());
+      const description = await coordinator.deviceDescription();
       return description?.roomName || description?.displayName || coordinator.name || coordinator.host;
     } catch (error) {
       this.sendDebug('Unable to fetch coordinator name', error?.message || error);
@@ -803,57 +804,65 @@ module.exports = NodeHelper.create({
     }
   },
 
-  _downloadFile(url, destPath) {
+  _downloadFile(url, destPath, timeoutMs = DOWNLOAD_TIMEOUT_MS) {
     return new Promise((resolve, reject) => {
       const tmpPath = `${destPath}.tmp`;
       const file = fs.createWriteStream(tmpPath);
+      let settled = false;
+
+      const fail = (err) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        file.close();
+        fs.unlink(tmpPath, () => {});
+        reject(err);
+      };
 
       const doRequest = (requestUrl, redirectCount) => {
         if (redirectCount > MAX_REDIRECTS) {
-          file.close();
-          fs.unlink(tmpPath, () => {});
-          reject(new Error('Too many redirects'));
+          fail(new Error('Too many redirects'));
           return;
         }
 
         const protocol = requestUrl.startsWith('https://') ? https : http;
-        protocol.get(requestUrl, (response) => {
+        const request = protocol.get(requestUrl, (response) => {
           if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
             response.resume();
-            doRequest(response.headers.location, redirectCount + 1);
+            // Location may be relative to the requested URL
+            doRequest(new URL(response.headers.location, requestUrl).toString(), redirectCount + 1);
             return;
           }
 
           if (response.statusCode !== 200) {
-            file.close();
-            fs.unlink(tmpPath, () => {});
-            reject(new Error(`HTTP ${response.statusCode}`));
+            response.resume();
+            fail(new Error(`HTTP ${response.statusCode}`));
             return;
           }
 
+          response.on('error', fail);
           response.pipe(file);
           file.on('finish', () => {
             file.close(() => {
               fs.rename(tmpPath, destPath, (err) => {
                 if (err) {
-                  fs.unlink(tmpPath, () => {});
-                  reject(err);
+                  fail(err);
                 } else {
+                  settled = true;
                   resolve();
                 }
               });
             });
           });
-          file.on('error', (err) => {
-            file.close();
-            fs.unlink(tmpPath, () => {});
-            reject(err);
-          });
-        }).on('error', (err) => {
-          file.close();
-          fs.unlink(tmpPath, () => {});
-          reject(err);
+          file.on('error', fail);
         });
+
+        // A speaker or server that stops answering must not stall the refresh.
+        request.setTimeout(timeoutMs, () => {
+          request.destroy(new Error(`Album art download timed out after ${timeoutMs} ms`));
+        });
+        request.on('error', fail);
       };
 
       doRequest(url, 0);
