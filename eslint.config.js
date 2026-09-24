@@ -39,7 +39,7 @@ module.exports = [
     }
   },
   {
-    files: ['test/**/*.test.js'],
+    files: ['test/**/*.js'],
     languageOptions: {
       ecmaVersion: 2021,
       sourceType: 'commonjs',

@@ -8,7 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Continuous integration** — a GitHub Actions workflow runs lint and unit tests on Node 22 and 24 for every push to `master` and every pull request, plus a dependency audit that fails on critical advisories.
+- **Unit tests now exercise the real module code** — `test/helpers/load-module.js` loads the actual `node_helper.js` (with MagicMirror's `node_helper`/`logger` stubbed) and `MMM-Sonos.js` (via a sandboxed `Module.register`). Previously the tests ran against hand-copied versions of each function, so changes to the module were not covered. Frontend tests live in `test/frontend.test.js`.
 - **`cardMaxWidth` option** (default: `null`) — sets a maximum width for each card, complementing `cardMinWidth`. Useful in row mode to prevent very wide cards when content is short and text wrapping is enabled. Example: `cardMaxWidth: 300` or `cardMaxWidth: '300px'`.
+
+### Security
+- Applied non-breaking `npm audit` fixes to the lockfile (axios 1.13.1 → 1.20.0, follow-redirects, form-data, brace-expansion).
 
 ### Changed
 - **`wrapText: true` + `maxTextLines` now works correctly in row mode** — cards in row mode now use a fixed width equal to `cardMinWidth` (instead of growing freely to fit content). This means long titles wrap to `maxTextLines` lines as intended, rather than extending the card horizontally.
