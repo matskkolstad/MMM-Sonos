@@ -410,12 +410,16 @@ With `enableControls: true`:
   tapping it lists the hidden zones so you can open one and start playback
   there.
 - Tapping any visible card (playing or idle) opens a control overlay with
-  play/pause, a volume slider, and a list of your Sonos favorites.
+  play/pause, previous/next track, shuffle, repeat (off → all → one), a
+  mute button, a volume slider, and a list of your Sonos favorites.
+  Previous/next, shuffle and repeat are hidden for radio and TV, which have
+  no track list to move through.
 - The volume slider controls the whole group together: every speaker in
   that group is set to the same volume level, not just the coordinator.
 - Once a zone has more than one speaker, a collapsed "▾ Per-speaker volume"
-  section appears below the group slider with one slider per member, for
-  adjusting a single speaker without moving the rest of the group.
+  section appears below the group slider with one slider and one mute
+  button per member, for adjusting a single speaker without changing the
+  rest of the group. The group mute button mutes every speaker in it.
 - A "Speakers" button in the overlay header opens a picker for changing
   group membership: pick another zone to merge every one of its speakers
   into the one you're viewing, or tap "Remove" next to a member to split
@@ -439,7 +443,7 @@ With `enableControls: true`:
 
 ![Touch control mode – cards with idle speakers](docs/touch-cards.png)
 
-**Control overlay (play/pause, group and per-speaker volume, favorites):**
+**Control overlay (playback, shuffle/repeat, mute, group and per-speaker volume, favorites):**
 
 ![Touch control mode – control overlay](docs/touch-overlay.png)
 
@@ -612,9 +616,7 @@ Some ideas for future improvements:
 - ~~Cache album art locally for faster loading on slower networks.~~ ✅ **Completed**
 - ~~Adjust volume on individual speakers in a group, in addition to group volume.~~ ✅ **Completed**
 - ~~Possibility to group and ungroup speakers.~~ ✅ **Completed**
-- Skip to the next/previous track directly from the control overlay, not just play/pause.
 - Add a sleep timer — automatically pause playback after N minutes.
-- Add a mute button per speaker, in addition to the volume slider.
 - Show a small icon per favorite indicating its type (radio, playlist, stream).
 
 ## License
