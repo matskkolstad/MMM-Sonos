@@ -2000,9 +2000,12 @@ Module.register('MMM-Sonos', {
         continue;
       }
 
-      // Significant seek/position jump
+      // Significant seek/position jump. Only a playing track moves forward on its own;
+      // a paused one stands still, so expecting it to advance would flag every update
+      // as a seek and re-animate the card each time.
       if (oldGroup.position != null && newGroup.position != null) {
-        const diff = Math.abs(newGroup.position - (oldGroup.position + timeElapsed));
+        const expected = isPlayingLike(oldGroup.playbackState) ? oldGroup.position + timeElapsed : oldGroup.position;
+        const diff = Math.abs(newGroup.position - expected);
         if (diff > 3) {
           this._log('Seek detected', newGroup.id, diff);
           changedIds.add(newGroup.id);

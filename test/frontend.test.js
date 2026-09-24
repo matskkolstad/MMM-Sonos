@@ -89,6 +89,25 @@ describe('_analyzeChanges() – playing-like state transitions', () => {
     assert.equal(result.changedIds.has('group-1'), true);
   });
 
+  // Reported on a real system: a paused card re-animated ("flickered") on every update,
+  // because its position stands still and that looked like a seek.
+  it('does not treat a paused track (position standing still) as a seek', () => {
+    const paused = makeGroup({ playbackState: 'paused', position: 30 });
+    const result = analyze([paused], [{ ...paused }], now - 5000, now);
+    assert.equal(result.needsFull, false);
+    assert.equal(result.changedIds.size, 0);
+  });
+
+  it('still detects a seek while paused when the position changes', () => {
+    const result = analyze(
+      [makeGroup({ playbackState: 'paused', position: 30 })],
+      [makeGroup({ playbackState: 'paused', position: 150 })],
+      now - 5000,
+      now
+    );
+    assert.equal(result.changedIds.has('group-1'), true);
+  });
+
   it('does not treat normal playback progress as a change', () => {
     const result = analyze([makeGroup({ position: 30 })], [makeGroup({ position: 45 })], now - 15000, now);
     assert.equal(result.needsFull, false);

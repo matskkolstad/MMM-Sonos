@@ -100,7 +100,7 @@ describe('Touch control mode end-to-end', { timeout: 180000 }, () => {
   it('opens the control overlay with play/pause, volume and favorites', async () => {
     await openOverlayFor(UUID.kitchen);
     const favorites = await page.$$eval(`${overlay} .mmm-sonos__overlay-favorite`, (items) => items.map((i) => i.innerText.trim()));
-    assert.deepEqual(favorites, ['NRK P3', 'P4 Lyden av Norge', 'Radio Norge']);
+    assert.deepEqual(favorites, ['NRK P3', 'P4 Lyden av Norge', 'Radio Norge', "Today's Top Hits"]);
     assert.equal(await page.inputValue(`${overlay} .mmm-sonos__overlay-volume-slider`), '25');
     await shot('overlay');
   });
@@ -145,6 +145,33 @@ describe('Touch control mode end-to-end', { timeout: 180000 }, () => {
     await closeOverlays();
     const state = await mirror.waitForRender((s) => cardFor(s.touch, UUID.office)?.title === 'NRK P3', 'Office card to show NRK P3');
     assert.equal(cardFor(state.touch, UUID.office).idle, false);
+  });
+
+  it('plays a Spotify playlist favorite (through the queue)', async () => {
+    await openOverlayFor(UUID.bedroom);
+    await page.click(`${overlay} .mmm-sonos__overlay-favorite:has-text("Today's Top Hits")`);
+    await waitFor(() => groupOf(UUID.bedroom)?.state === 'playing', 'Bedroom to play the playlist');
+    assert.equal(groupOf(UUID.bedroom).track.title, 'Die With A Smile');
+    assert.equal(await page.$(`${overlay} .mmm-sonos__overlay-error:not([hidden])`), null, 'an error is shown');
+    await closeOverlays();
+  });
+
+  // Reported on a real mirror: a paused card flickered on every update.
+  it('leaves a paused card alone between updates (no flicker)', async () => {
+    await openOverlayFor(UUID.kitchen);
+    await page.click(`${overlay} .mmm-sonos__overlay-playpause`);
+    await waitFor(() => groupOf(UUID.kitchen).state === 'paused', 'Kitchen to pause');
+    await closeOverlays();
+    const card = `.e2e-touch [data-group-id^="${UUID.kitchen}:"]`;
+    await page.waitForSelector(`${card}.mmm-sonos__group--idle`);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const handle = await page.$(card);
+    await new Promise((resolve) => setTimeout(resolve, 11000)); // two update intervals
+    assert.equal(await handle.evaluate((el) => el.isConnected), true, 'the paused card was re-rendered');
+    await openOverlayFor(UUID.kitchen);
+    await page.click(`${overlay} .mmm-sonos__overlay-playpause`);
+    await waitFor(() => groupOf(UUID.kitchen).state === 'playing', 'Kitchen to play again');
+    await closeOverlays();
   });
 
   it('shows no untranslated text keys', async () => {

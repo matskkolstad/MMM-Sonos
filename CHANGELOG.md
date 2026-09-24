@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - End-to-end test for touch control mode, and control actions in the Sonos simulator.
 
 ### Fixed
+- **Playlist and album favorites did not start** in touch control mode ("could not reach speaker"). They are now played through the queue like in the Sonos app, and all favorites are sent with the metadata Sonos stores for them.
+- **Paused cards flickered on every update** — a paused track's position stands still, which the module treated as a seek and re-animated the card each time. Affected paused cards with `showWhenPaused: true` as well.
+- Sonos status placeholders such as `ZPSTR_CONNECTING` / `ZPSTR_BUFFERING` are no longer shown as "now playing" text while a stream starts.
+- Failed control actions are now logged in the MagicMirror log.
 - The progress bar of a paused track no longer keeps counting up (#68).
 - Missing translations fell back to Afrikaans (the first language listed) instead of English, showing raw keys such as `SPEAKERS` in languages without the new texts. English is now the fallback; the Norwegian translation is complete.
 
