@@ -1,6 +1,6 @@
 {
   "name": "mmm-sonos",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "MagicMirror² module that shows what is playing on your Sonos speakers.",
   "main": "MMM-Sonos.js",
   "scripts": {
