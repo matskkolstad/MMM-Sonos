@@ -411,3 +411,65 @@ describe('SONOS_DATA handling while a full re-render is pending or running', () 
     assert.equal(count(mod, 'updateDom'), 0);
   });
 });
+
+describe('touch control mode – favorites', () => {
+  const mod = loadFrontendModule({ enableControls: true });
+
+  it('caps the favorites list to maxFavorites', () => {
+    const favorites = Array.from({ length: 20 }, (_, i) => ({ id: `f${i}`, title: `Favorite ${i}` }));
+    assert.deepEqual(mod._limitFavorites(favorites, 12), favorites.slice(0, 12));
+  });
+
+  it('returns the full list when under the limit, or when the limit is 0', () => {
+    const favorites = Array.from({ length: 20 }, (_, i) => ({ id: `f${i}` }));
+    assert.equal(mod._limitFavorites(favorites.slice(0, 1), 12).length, 1);
+    assert.equal(mod._limitFavorites(favorites, 0).length, 20);
+    assert.equal(mod._limitFavorites(undefined, 12).length, 0);
+  });
+
+  it('marks the favorite matching the playing title as active, even while pending', () => {
+    assert.equal(mod._resolveFavoriteState({ id: 'a', title: 'NRK P3' }, 'NRK P3', 'a'), 'active');
+  });
+
+  it('marks a tapped favorite as pending until it plays', () => {
+    assert.equal(mod._resolveFavoriteState({ id: 'a', title: 'NRK P3' }, 'Other', 'a'), 'pending');
+    assert.equal(mod._resolveFavoriteState({ id: 'b', title: 'P4' }, 'Other', 'a'), 'idle');
+  });
+});
+
+describe('_parseProgressData() – paused tracks', () => {
+  const mod = loadFrontendModule();
+  const dataset = (isPlaying, secondsAgo) => ({
+    initialPosition: '9',
+    duration: '173',
+    timestamp: String(Date.now() - secondsAgo * 1000),
+    isPlaying: String(isPlaying)
+  });
+
+  it('keeps the position still while paused', () => {
+    assert.equal(mod._parseProgressData(dataset(false, 10)).currentPosition, 9);
+  });
+
+  it('moves the position forward while playing', () => {
+    const position = mod._parseProgressData(dataset(true, 10)).currentPosition;
+    assert.ok(position >= 19 && position < 20, `position ${position}`);
+  });
+});
+
+describe('_isIdleControlZone()', () => {
+  const idle = makeGroup({ name: 'Stue', members: ['Stue'], playbackState: 'stopped' });
+
+  it('is false unless touch controls are enabled', () => {
+    assert.equal(loadFrontendModule()._isIdleControlZone(idle), false);
+  });
+
+  it('is true for a non-playing speaker with enableControls and controlShowIdleZones', () => {
+    assert.equal(loadFrontendModule({ enableControls: true })._isIdleControlZone(idle), true);
+  });
+
+  it('is false for a playing speaker, a hidden speaker, or with controlShowIdleZones off', () => {
+    assert.equal(loadFrontendModule({ enableControls: true })._isIdleControlZone(makeGroup()), false);
+    assert.equal(loadFrontendModule({ enableControls: true, hiddenSpeakers: ['Stue'] })._isIdleControlZone(idle), false);
+    assert.equal(loadFrontendModule({ enableControls: true, controlShowIdleZones: false })._isIdleControlZone(idle), false);
+  });
+});

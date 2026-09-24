@@ -17,5 +17,8 @@
   "SOURCE_LINE_IN": "Линейный вход",
   "SOURCE_UNKNOWN": "Неизвестно",
   "VOLUME": "Громкость",
-  "SOURCE_APPLE_MUSIC": "Apple Music"
+  "SOURCE_APPLE_MUSIC": "Apple Music",
+  "SONOS_CONTROL": "Sonos",
+  "NOW_PLAYING": "Сейчас играет",
+  "MORE_SPEAKERS": "Другие колонки"
 }

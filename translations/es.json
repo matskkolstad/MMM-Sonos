@@ -17,5 +17,8 @@
   "SOURCE_LINE_IN": "Entrada de línea",
   "SOURCE_UNKNOWN": "Desconocido",
   "VOLUME": "Volumen",
-  "SOURCE_APPLE_MUSIC": "Apple Music"
+  "SOURCE_APPLE_MUSIC": "Apple Music",
+  "SONOS_CONTROL": "Sonos",
+  "NOW_PLAYING": "Reproduciendo ahora",
+  "MORE_SPEAKERS": "Más altavoces"
 }

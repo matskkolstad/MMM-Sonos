@@ -17,5 +17,8 @@
   "SOURCE_LINE_IN": "Linjeindgang",
   "SOURCE_UNKNOWN": "Ukendt",
   "VOLUME": "Lydstyrke",
-  "SOURCE_APPLE_MUSIC": "Apple Music"
+  "SOURCE_APPLE_MUSIC": "Apple Music",
+  "SONOS_CONTROL": "Sonos",
+  "NOW_PLAYING": "Spiller nu",
+  "MORE_SPEAKERS": "Flere højttalere"
 }

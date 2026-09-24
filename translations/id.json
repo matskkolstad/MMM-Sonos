@@ -17,5 +17,8 @@
   "SOURCE_LINE_IN": "Masukan baris",
   "SOURCE_UNKNOWN": "Tidak diketahui",
   "VOLUME": "Volume",
-  "SOURCE_APPLE_MUSIC": "Apple Music"
+  "SOURCE_APPLE_MUSIC": "Apple Music",
+  "SONOS_CONTROL": "Sonos",
+  "NOW_PLAYING": "Sedang Diputar",
+  "MORE_SPEAKERS": "Speaker lainnya"
 }

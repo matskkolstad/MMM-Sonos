@@ -576,3 +576,30 @@ describe('_inferCoordinatorName()', () => {
     assert.equal(await helper._inferCoordinatorName(coordinator), '192.168.1.10');
   });
 });
+
+describe('touch control mode – node_helper', () => {
+  it('_sanitizeVolume clamps to 0–100 integers and rejects non-numbers', () => {
+    const helper = loadNodeHelper();
+    assert.equal(helper._sanitizeVolume(42.4), 42);
+    assert.equal(helper._sanitizeVolume('55'), 55);
+    assert.equal(helper._sanitizeVolume(-5), 0);
+    assert.equal(helper._sanitizeVolume(250), 100);
+    assert.equal(helper._sanitizeVolume('loud'), null);
+    assert.equal(helper._sanitizeVolume(undefined), null);
+  });
+
+  it('enables controls in node_helper when any instance enables them', () => {
+    const helper = loadNodeHelper();
+    helper._mergeInstanceConfig({ instanceId: 'touch', enableControls: true });
+    assert.equal(helper._mergeInstanceConfig({ instanceId: 'row', enableControls: false }).enableControls, true);
+  });
+
+  it('rejects an invalid volume without contacting a speaker', async () => {
+    const helper = loadNodeHelper();
+    helper.lastPayload = [{ id: 'z1', coordinatorHost: '192.0.2.1', memberDetails: [] }];
+    await helper._handleSetVolume('z1', 'loud');
+    assert.deepEqual(helper.notifications.at(-1).payload, {
+      zoneId: 'z1', action: 'setVolume', success: false, error: 'Invalid volume'
+    });
+  });
+});
