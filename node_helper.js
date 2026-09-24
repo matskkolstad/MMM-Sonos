@@ -67,6 +67,9 @@ module.exports = NodeHelper.create({
     switch (notification) {
       case 'SONOS_CONFIG':
         this._configure(this._mergeInstanceConfig(payload || {}));
+        if (this._favoritesLoaded) {
+          this.sendSocketNotification('SONOS_FAVORITES', { favorites: this.favorites, timestamp: Date.now() });
+        }
         break;
       case 'SONOS_REQUEST':
         this._handleDataRequest();
@@ -343,6 +346,9 @@ module.exports = NodeHelper.create({
 
       this.lastPayload = formatted;
       this.lastPayloadAt = Date.now();
+      if (this.config.enableControls && !this._favoritesLoaded) {
+        this._refreshFavorites();
+      }
       this.sendSocketNotification('SONOS_DATA', {
         groups: formatted,
         timestamp: this.lastPayloadAt
@@ -354,10 +360,22 @@ module.exports = NodeHelper.create({
     }
   },
 
-  async _refreshFavorites() {
+  // Only one favorites fetch runs at a time; callers that arrive meanwhile share it.
+  _refreshFavorites() {
     if (!this.coordinator) {
-      return;
+      // No speaker found yet: _doRefresh() fetches favorites once one is found,
+      // instead of leaving the list empty until the next favoritesRefreshInterval.
+      return Promise.resolve();
     }
+    if (!this._favoritesPromise) {
+      this._favoritesPromise = this._fetchFavorites().finally(() => {
+        this._favoritesPromise = null;
+      });
+    }
+    return this._favoritesPromise;
+  },
+
+  async _fetchFavorites() {
     try {
       // Browse FV:2 directly instead of getFavorites(): the latter drops the metadata
       // (<r:resMD>) Sonos stores with each favorite, which is needed to play playlists
@@ -380,10 +398,18 @@ module.exports = NodeHelper.create({
           metadata: item['r:resMD'] || ''
         }))
       );
+      this._favoritesLoaded = true;
       this.sendSocketNotification('SONOS_FAVORITES', { favorites: this.favorites, timestamp: Date.now() });
     } catch (error) {
-      this.sendDebug('Failed to fetch favorites', error?.message || error);
+      Log.warn(`[MMM-Sonos] Could not load Sonos favorites: ${this._describeError(error)}`);
     }
+  },
+
+  // Shorten UPnP errors (the sonos package includes the whole SOAP envelope) to their code.
+  _describeError(error) {
+    const message = error?.message || String(error);
+    const code = message.match(/<errorCode>(\d+)<\/errorCode>/)?.[1];
+    return code ? `UPnP error ${code}` : message;
   },
 
   // Playlists, albums and similar favorites (x-rincon-cpcontainer:) cannot be set as the
@@ -396,16 +422,25 @@ module.exports = NodeHelper.create({
 
   async _playFavorite(device, zone, favorite) {
     const metadata = favorite.metadata || '';
+    // Name the step that failed, so a report from a real system says what Sonos rejected.
+    const step = async (name, action) => {
+      try {
+        return await action();
+      } catch (error) {
+        const upnpClass = metadata.match(/<upnp:class>([^<]*)<\/upnp:class>/)?.[1] || 'unknown class';
+        throw new Error(`${name}: ${this._describeError(error)} (favorite "${favorite.title}", ${upnpClass}, ${favorite.uri})`, { cause: error });
+      }
+    };
     if (this._isContainerFavorite(favorite)) {
       const coordinatorUuid = String(zone.id || '').split(':')[0];
-      await device.flush();
-      await device.queue({ uri: favorite.uri, metadata });
-      await device.setAVTransportURI({ uri: `x-rincon-queue:${coordinatorUuid}#0`, metadata: '', onlySetUri: true });
-      await device.selectTrack(1);
-      await device.play();
+      await step('clear queue', () => device.flush());
+      await step('add to queue', () => device.queue({ uri: favorite.uri, metadata }));
+      await step('select queue', () => device.setAVTransportURI({ uri: `x-rincon-queue:${coordinatorUuid}#0`, metadata: '', onlySetUri: true }));
+      await step('select track', () => device.selectTrack(1));
+      await step('play', () => device.play());
       return;
     }
-    await device.setAVTransportURI({ uri: favorite.uri, metadata });
+    await step('play stream', () => device.setAVTransportURI({ uri: favorite.uri, metadata }));
   },
 
   // Sonos reports placeholders such as ZPSTR_CONNECTING / ZPSTR_BUFFERING while a
@@ -855,7 +890,7 @@ module.exports = NodeHelper.create({
 
   _sendControlResult(zoneId, action, success, error) {
     if (!success) {
-      Log.warn(`[MMM-Sonos] Control action "${action}" failed for zone ${zoneId}: ${error}`);
+      Log.warn(`[MMM-Sonos] Control action "${action}" failed for zone ${zoneId}: ${this._describeError(error)}`);
     }
     this.sendSocketNotification('SONOS_CONTROL_RESULT', { zoneId, action, success, error: error || null });
   },

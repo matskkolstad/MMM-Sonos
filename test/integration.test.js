@@ -356,6 +356,35 @@ describe('node_helper against the Sonos simulator', () => {
       assert.equal(zone('Bedroom').title, 'P4 Lyden av Norge');
     });
 
+    // Reported on a real system: favorites only appeared minutes after startup when the
+    // speakers had not been found yet at startup.
+    it('loads favorites as soon as the speakers are found, not minutes later', async () => {
+      const fresh = loadNodeHelper({ ...baseConfig, enableControls: true });
+      await fresh._refreshFavorites(); // at startup: no speaker known yet
+      assert.equal(fresh._favoritesLoaded, undefined);
+
+      await fresh._refresh(); // finds the speakers via knownDevices
+      await fresh._favoritesPromise;
+      assert.equal(fresh.favorites.length, 4);
+      assert.ok(fresh.notifications.some((n) => n.notification === 'SONOS_FAVORITES'));
+    });
+
+    it('sends the loaded favorites to a browser that connects later', async () => {
+      await helper._refreshFavorites();
+      helper.notifications = [];
+      helper._configure = async () => {}; // only the notification matters here
+      helper.socketNotificationReceived('SONOS_CONFIG', { instanceId: 'late-browser', enableControls: true });
+      assert.equal(helper.notifications.at(-1).notification, 'SONOS_FAVORITES');
+    });
+
+    it('names the step and the favorite when Sonos rejects a favorite', async () => {
+      await helper._refreshFavorites();
+      const playlist = helper.favorites.find((f) => f.title === "Today's Top Hits");
+      helper._isContainerFavorite = () => false; // force the stream path, which Sonos rejects for playlists
+      await helper._handlePlayFavorite(zone('Office').id, playlist.id);
+      assert.match(lastResult().error, /^play stream: UPnP error 714 \(favorite "Today's Top Hits", object\.container\.playlistContainer, x-rincon-cpcontainer:/);
+    });
+
     it('reports an error for an unknown zone without contacting any speaker', async () => {
       sim.requests = [];
       await helper._handlePlay('no-such-zone');
