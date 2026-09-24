@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Unit tests now exercise the real module code** — `test/helpers/load-module.js` loads the actual `node_helper.js` (with MagicMirror's `node_helper`/`logger` stubbed) and `MMM-Sonos.js` (via a sandboxed `Module.register`). Previously the tests ran against hand-copied versions of each function, so changes to the module were not covered. Frontend tests live in `test/frontend.test.js`.
 - **`cardMaxWidth` option** (default: `null`) — sets a maximum width for each card, complementing `cardMinWidth`. Useful in row mode to prevent very wide cards when content is short and text wrapping is enabled. Example: `cardMaxWidth: 300` or `cardMaxWidth: '300px'`.
 
+### Fixed
+- **Track title missing for Apple Music and Amazon Music (#53)** — on-demand tracks from these services (track URIs starting with `x-sonosapi-hls-static:`) were detected as radio, so the album name was shown in place of the track title (and twice with `showAlbum: true`). Only real radio stream URIs are treated as radio now, and Apple Music/Spotify are also recognised by their Sonos service id. Local files whose path contains "/radio" (e.g. *Radiohead*) are no longer detected as radio either.
+
 ### Security
 - Applied non-breaking `npm audit` fixes to the lockfile (axios 1.13.1 → 1.20.0, follow-redirects, form-data, brace-expansion).
 

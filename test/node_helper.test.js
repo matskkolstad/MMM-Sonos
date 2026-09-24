@@ -234,6 +234,37 @@ describe('_detectSource()', () => {
     assert.equal(helper._detectSource({ uri: 'x-apple-itunes:something' }), 'apple_music');
   });
 
+  // Issue #53: on-demand tracks from Apple Music / Amazon Music use x-sonosapi-hls-static:
+  // and must not be treated as radio (radio shows the album/station name as title).
+  it('returns "apple_music" for an Apple Music track (x-sonosapi-hls-static, sid=204)', () => {
+    assert.equal(helper._detectSource({ uri: 'x-sonosapi-hls-static:song%3a1440818839?sid=204&flags=8224&sn=3' }), 'apple_music');
+  });
+
+  it('does not treat an Amazon Music track (x-sonosapi-hls-static, sid=201) as radio', () => {
+    const uri = 'x-sonosapi-hls-static:catalog%2ftracks%2fB0DHJ4X6ZK%2f%3falbumAsin%3dB0DHJ3XFQR?sid=201&flags=0&sn=4';
+    assert.notEqual(helper._detectSource({ uri }), 'radio');
+  });
+
+  it('does not treat a TIDAL/Deezer track (x-sonos-http) as radio', () => {
+    assert.notEqual(helper._detectSource({ uri: 'x-sonos-http:track%3a12345.mp4?sid=174&flags=8224&sn=5' }), 'radio');
+  });
+
+  it('returns "spotify" based on the Spotify service id (sid=12)', () => {
+    assert.equal(helper._detectSource({ uri: 'x-sonos-http:something?sid=12&flags=8224&sn=1' }), 'spotify');
+  });
+
+  it('returns "radio" for Sonos Radio (x-sonosapi-radio)', () => {
+    assert.equal(helper._detectSource({ uri: 'x-sonosapi-radio:sonos%3a123?sid=303&flags=8300&sn=9' }), 'radio');
+  });
+
+  it('returns "radio" for an Apple Music radio station (x-sonosapi-hls, sid=204)', () => {
+    assert.equal(helper._detectSource({ uri: 'x-sonosapi-hls:radio%3ara.978194965?sid=204&flags=8300&sn=3' }), 'radio');
+  });
+
+  it('does not treat a local file whose path contains "/Radio…" as radio', () => {
+    assert.equal(helper._detectSource({ uri: 'x-file-cifs://nas/Music/Radiohead/OK%20Computer/01.flac' }), null);
+  });
+
   it('returns null for local library track', () => {
     assert.equal(helper._detectSource({ uri: 'x-file-cifs://nas/music/song.mp3', type: 'track' }), null);
   });

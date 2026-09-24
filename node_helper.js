@@ -13,6 +13,24 @@ const { Vibrant } = require('node-vibrant/node');
 const MAX_REDIRECTS = 5;
 const DEFAULT_CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
 
+// Track URI prefixes Sonos uses for live radio streams.
+const RADIO_URI_PREFIXES = [
+  'x-sonosapi-stream:',
+  'x-sonosapi-radio:',
+  'x-sonosapi-hls:',
+  'x-sonosapi-rtd:',
+  'x-rincon-mp3radio:',
+  'aac:',
+  'hls-radio:'
+];
+
+// Sonos music service IDs (the `sid` parameter in track URIs) for sources the
+// frontend has a label for.
+const MUSIC_SERVICE_IDS = {
+  12: 'spotify',
+  204: 'apple_music'
+};
+
 module.exports = NodeHelper.create({
   start() {
     this.config = {};
@@ -572,20 +590,21 @@ module.exports = NodeHelper.create({
     // Check URI patterns first — more reliable than track.type which may be generic (e.g. 'track')
     const uri = (track.uri || '').toLowerCase();
     if (uri) {
+      // Only prefixes Sonos uses for live streams count as radio. In particular
+      // x-sonosapi-hls-static: is NOT radio: Apple Music and Amazon Music use it for
+      // ordinary on-demand tracks, and treating those as radio replaced the track
+      // title with the album name (issue #53).
       if (
-        uri.startsWith('x-sonosapi-stream:') ||
-        uri.startsWith('x-sonosapi-hls-static:') ||
-        uri.startsWith('x-sonosapi-hls:') ||
-        uri.startsWith('x-sonosapi-rtd:') ||
-        uri.startsWith('x-rincon-mp3radio:') ||
-        uri.startsWith('aac:') ||
-        uri.startsWith('hls-radio:') ||
-        uri.includes('x-sonosapi') ||
+        RADIO_URI_PREFIXES.some((prefix) => uri.startsWith(prefix)) ||
         uri.includes('tunein') ||
-        uri.includes('radiotime') ||
-        uri.includes('/radio')
+        uri.includes('radiotime')
       ) {
         return 'radio';
+      }
+
+      const serviceId = uri.match(/[?&]sid=(\d+)/)?.[1];
+      if (serviceId && MUSIC_SERVICE_IDS[serviceId]) {
+        return MUSIC_SERVICE_IDS[serviceId];
       }
 
       if (uri.includes('spotify')) {
