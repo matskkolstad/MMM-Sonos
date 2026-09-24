@@ -122,6 +122,36 @@ describe('node_helper against the Sonos simulator', () => {
     });
   });
 
+  // Data as reported by a real Sonos system (maintainer's debug log, 2026-09-24).
+  describe('real-radio scenario (NRK Radio and myTuner)', () => {
+    let groups;
+
+    before(async () => {
+      sim.setScenario(loadScenario('real-radio'));
+      groups = await fetchGroups();
+    });
+
+    it('shows NRK P3 (NRK Radio service, x-sonosapi-hls, sid=277) by station name', () => {
+      const bad = byName(groups, 'Bad');
+      assert.equal(bad.source, 'radio');
+      assert.equal(bad.title, 'NRK P3');
+      assert.equal(bad.artist, null);
+    });
+
+    it('shows P4 via myTuner with station name and now-playing text', () => {
+      const kitchen = byName(groups, 'Kjøkken');
+      assert.equal(kitchen.source, 'radio');
+      assert.equal(kitchen.title, 'P4 Lyden av Norge');
+      assert.equal(kitchen.artist, 'ABBA - Dancing Queen');
+    });
+
+    it('never shows the end of the stream URL ("P04_MM?args=…") as title', () => {
+      const stue = byName(groups, 'Stue');
+      assert.equal(stue.source, 'radio');
+      assert.equal(stue.title, 'Radio');
+    });
+  });
+
   describe('load on the speakers', () => {
     const countBy = (requests) => requests.reduce((acc, r) => ({ ...acc, [r.action]: (acc[r.action] || 0) + 1 }), {});
 

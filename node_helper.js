@@ -468,7 +468,10 @@ module.exports = NodeHelper.create({
             /^x-sonosapi/i.test(rawTitle) ||
             /^aac:/i.test(rawTitle) ||
             /^hls-radio:/i.test(rawTitle) ||
-            /^x-rincon/i.test(rawTitle);
+            /^x-rincon/i.test(rawTitle) ||
+            // Some stations report the end of the stream URL as title, e.g.
+            // "P04_MM?args=3rdparty_03" for x-rincon-mp3radio://…/P04_MM?args=3rdparty_03
+            (!!track?.uri && track.uri.endsWith(`/${rawTitle}`));
           // Priority: stationName (from DIDL) > usable rawTitle > streamTitle > 'Radio'
           displayTitle = stationName || (titleIsUseless ? (streamTitle || 'Radio') : rawTitle);
           // streamTitle / streamContent (e.g. "Sigrid – Burning Bridges") as artist line
