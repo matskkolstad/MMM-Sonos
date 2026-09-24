@@ -112,12 +112,53 @@ describe('Touch control mode end-to-end', { timeout: 180000 }, () => {
     await waitFor(() => groupOf(UUID.kitchen).state === 'playing', 'Kitchen to play again');
   });
 
+  it('skips to the next and previous track', async () => {
+    await page.click(`${overlay} .mmm-sonos__overlay-next`);
+    await waitFor(() => groupOf(UUID.kitchen).track.title === 'Somebody Told Me', 'the next track');
+    await page.click(`${overlay} .mmm-sonos__overlay-previous`);
+    await waitFor(() => groupOf(UUID.kitchen).track.title === 'Mr. Brightside', 'the previous track');
+  });
+
+  it('toggles shuffle and cycles repeat (off → all → one → off)', async () => {
+    await page.click(`${overlay} .mmm-sonos__overlay-shuffle`);
+    await waitFor(() => groupOf(UUID.kitchen).playMode === 'SHUFFLE_NOREPEAT', 'shuffle on');
+    await page.click(`${overlay} .mmm-sonos__overlay-repeat`);
+    await waitFor(() => groupOf(UUID.kitchen).playMode === 'SHUFFLE', 'shuffle + repeat all');
+    await page.waitForSelector(`${overlay} .mmm-sonos__overlay-repeat[aria-pressed="true"]`);
+    await shot('overlay-shuffle-repeat');
+    await page.click(`${overlay} .mmm-sonos__overlay-repeat`);
+    await waitFor(() => groupOf(UUID.kitchen).playMode === 'SHUFFLE_REPEAT_ONE', 'repeat one');
+    await page.click(`${overlay} .mmm-sonos__overlay-repeat`);
+    await page.click(`${overlay} .mmm-sonos__overlay-shuffle`);
+    await waitFor(() => groupOf(UUID.kitchen).playMode === 'NORMAL', 'shuffle and repeat off');
+  });
+
+  it('mutes and unmutes the speaker', async () => {
+    await page.click(`${overlay} .mmm-sonos__overlay-mute`);
+    await waitFor(() => sim.mutes.get(UUID.kitchen) === true, 'Kitchen muted');
+    await page.waitForSelector(`${overlay} .mmm-sonos__overlay-mute[aria-pressed="true"]`);
+    await page.click(`${overlay} .mmm-sonos__overlay-mute`);
+    await waitFor(() => sim.mutes.get(UUID.kitchen) === false, 'Kitchen unmuted');
+  });
+
   it('changes the volume with the slider', async () => {
     await page.$eval(`${overlay} .mmm-sonos__overlay-volume-slider`, (slider) => {
       slider.value = '40';
       slider.dispatchEvent(new Event('input', { bubbles: true }));
     });
     await waitFor(() => sim.volumes.get(UUID.kitchen) === 40, 'Kitchen volume 40');
+    await closeOverlays();
+  });
+
+  it('mutes a single speaker in a group', async () => {
+    await openOverlayFor(UUID.livingRoom);
+    await page.click(`${overlay} .mmm-sonos__overlay-member-volumes-toggle`);
+    await page.click(`${overlay} .mmm-sonos__overlay-member-volume-row[data-member-name="Hallway"] .mmm-sonos__overlay-member-mute`);
+    await waitFor(() => sim.mutes.get(UUID.hallway) === true, 'Hallway muted');
+    assert.notEqual(sim.mutes.get(UUID.livingRoom), true, 'the other speaker stays unmuted');
+    await shot('overlay-group');
+    await page.click(`${overlay} .mmm-sonos__overlay-member-volume-row[data-member-name="Hallway"] .mmm-sonos__overlay-member-mute`);
+    await waitFor(() => sim.mutes.get(UUID.hallway) === false, 'Hallway unmuted');
     await closeOverlays();
   });
 
@@ -142,6 +183,10 @@ describe('Touch control mode end-to-end', { timeout: 180000 }, () => {
     await waitFor(() => groupOf(UUID.office)?.state === 'playing', 'Office to play NRK P3');
     await page.waitForSelector(`${overlay} .mmm-sonos__overlay-favorite--active:has-text("NRK P3")`);
     await shot('favorite-playing');
+    // Radio has no queue: no previous/next/shuffle/repeat, just play/pause
+    await page.waitForSelector(`${overlay} .mmm-sonos__overlay-next[hidden]`, { state: 'attached' });
+    assert.equal(await page.isVisible(`${overlay} .mmm-sonos__overlay-shuffle`), false);
+    assert.equal(await page.isVisible(`${overlay} .mmm-sonos__overlay-playpause`), true);
     await closeOverlays();
     const state = await mirror.waitForRender((s) => cardFor(s.touch, UUID.office)?.title === 'NRK P3', 'Office card to show NRK P3');
     assert.equal(cardFor(state.touch, UUID.office).idle, false);

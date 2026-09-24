@@ -31,5 +31,11 @@
   "JOIN_SPEAKER": "Legg til høyttaler/gruppe",
   "NO_OTHER_SPEAKERS": "Fant ingen andre høyttalere",
   "PLAY": "Spill av",
-  "PAUSE": "Pause"
+  "PAUSE": "Pause",
+  "PREVIOUS": "Forrige",
+  "NEXT": "Neste",
+  "SHUFFLE": "Tilfeldig rekkefølge",
+  "REPEAT": "Gjenta",
+  "MUTE": "Demp",
+  "UNMUTE": "Slå på lyd"
 }

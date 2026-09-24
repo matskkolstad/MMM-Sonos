@@ -31,5 +31,11 @@
   "JOIN_SPEAKER": "Join another speaker/group",
   "NO_OTHER_SPEAKERS": "No other speakers found",
   "PLAY": "Play",
-  "PAUSE": "Pause"
+  "PAUSE": "Pause",
+  "PREVIOUS": "Previous",
+  "NEXT": "Next",
+  "SHUFFLE": "Shuffle",
+  "REPEAT": "Repeat",
+  "MUTE": "Mute",
+  "UNMUTE": "Unmute"
 }
