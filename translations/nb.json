@@ -21,7 +21,7 @@
   "IDLE_LABEL": "Ingenting spilles",
   "CLOSE": "Lukk",
   "NO_FAVORITES": "Ingen favoritter funnet — legg til i Sonos-appen",
-  "CONTROL_ERROR": "Fikk ikke kontakt med høyttaler",
+  "CONTROL_ERROR": "Kunne ikke utføre handlingen",
   "ZONE_UNAVAILABLE": "Denne høyttaleren er ikke lenger tilgjengelig",
   "MORE_SPEAKERS": "Flere høyttalere",
   "SPEAKERS": "Høyttalere",

@@ -466,9 +466,10 @@ With `enableControls: true`:
 - `maxGroups` (default `6`) also limits how many cards control mode shows.
   Raise it if you have more zones than that; idle speakers behind the "+"
   tile are not limited.
-- Favorites are played by their stream address. Radio stations work; some
-  playlists or service favorites may need metadata the `sonos` library does
-  not expose yet — please report any favorite that does not start.
+- Favorites are played the way the Sonos app plays them: stations and
+  streams directly, playlists and albums by replacing the queue. If a
+  favorite does not start, the reason is written to the MagicMirror log
+  (`Control action "playFavorite" failed …`) — please include it in a report.
 
 ## Additional features
 

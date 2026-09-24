@@ -2,7 +2,7 @@
 
 const NodeHelper = require('node_helper');
 const Log = require('logger');
-const { AsyncDeviceDiscovery, Sonos } = require('sonos');
+const { AsyncDeviceDiscovery, Sonos, Helpers: SonosHelpers } = require('sonos');
 const path = require('node:path');
 const fs = require('node:fs');
 const nodeCrypto = require('node:crypto');
@@ -359,12 +359,63 @@ module.exports = NodeHelper.create({
       return;
     }
     try {
-      const result = await this.coordinator.getFavorites();
-      this.favorites = this._mapFavorites(result?.items);
+      // Browse FV:2 directly instead of getFavorites(): the latter drops the metadata
+      // (<r:resMD>) Sonos stores with each favorite, which is needed to play playlists
+      // and most service favorites.
+      const result = await this.coordinator.contentDirectoryService().Browse({
+        ObjectID: 'FV:2',
+        BrowseFlag: 'BrowseDirectChildren',
+        Filter: '*',
+        StartingIndex: '0',
+        RequestedCount: '100',
+        SortCriteria: ''
+      });
+      const didl = await SonosHelpers.ParseXml(result?.Result || '');
+      const items = didl?.['DIDL-Lite']?.item;
+      this.favorites = this._mapFavorites(
+        (Array.isArray(items) ? items : items ? [items] : []).map((item) => ({
+          id: item.id,
+          title: item['dc:title'],
+          uri: typeof item.res === 'object' ? item.res?._ : item.res,
+          metadata: item['r:resMD'] || ''
+        }))
+      );
       this.sendSocketNotification('SONOS_FAVORITES', { favorites: this.favorites, timestamp: Date.now() });
     } catch (error) {
       this.sendDebug('Failed to fetch favorites', error?.message || error);
     }
+  },
+
+  // Playlists, albums and similar favorites (x-rincon-cpcontainer:) cannot be set as the
+  // transport URI — Sonos rejects them. Like the Sonos app, replace the queue with them
+  // and play the queue. Streams are set directly, with their metadata so the speaker
+  // knows the station name and service.
+  _isContainerFavorite(favorite) {
+    return /^x-rincon-cpcontainer:/i.test(favorite.uri || '') || /object\.container/i.test(favorite.metadata || '');
+  },
+
+  async _playFavorite(device, zone, favorite) {
+    const metadata = favorite.metadata || '';
+    if (this._isContainerFavorite(favorite)) {
+      const coordinatorUuid = String(zone.id || '').split(':')[0];
+      await device.flush();
+      await device.queue({ uri: favorite.uri, metadata });
+      await device.setAVTransportURI({ uri: `x-rincon-queue:${coordinatorUuid}#0`, metadata: '', onlySetUri: true });
+      await device.selectTrack(1);
+      await device.play();
+      return;
+    }
+    await device.setAVTransportURI({ uri: favorite.uri, metadata });
+  },
+
+  // Sonos reports placeholders such as ZPSTR_CONNECTING / ZPSTR_BUFFERING while a
+  // stream starts; they are status codes, not something to show as "now playing".
+  _cleanStreamText(value) {
+    if (typeof value !== 'string') {
+      return null;
+    }
+    const text = value.trim();
+    return !text || /^ZPSTR_/i.test(text) ? null : text;
   },
 
   _mapFavorites(items) {
@@ -372,7 +423,8 @@ module.exports = NodeHelper.create({
       .map((item, index) => ({
         id: item.id || `favorite-${index}`,
         title: item.title || 'Untitled',
-        uri: item.uri
+        uri: item.uri,
+        metadata: item.metadata || ''
       }))
       .filter((f) => !!f.uri);
   },
@@ -532,7 +584,7 @@ module.exports = NodeHelper.create({
       return;
     }
     try {
-      await new Sonos(zone.coordinatorHost, zone.coordinatorPort || 1400).setAVTransportURI(favorite.uri);
+      await this._playFavorite(new Sonos(zone.coordinatorHost, zone.coordinatorPort || 1400), zone, favorite);
       this._sendControlResult(zoneId, 'playFavorite', true);
       // Without this, the overlay only learns the new track on the next regular poll
       // tick (up to `updateInterval`, e.g. 15s) — same pattern as join/leave.
@@ -636,7 +688,7 @@ module.exports = NodeHelper.create({
             if (posInfo?.TrackMetaData) {
               const raw = this._parseDIDL(posInfo.TrackMetaData, 'r:streamContent');
               if (raw && raw.trim()) {
-                streamContent = raw.trim();
+                streamContent = this._cleanStreamText(raw);
               }
             }
 
@@ -668,7 +720,7 @@ module.exports = NodeHelper.create({
           track?.album ||
           track?.albumArtist ||
           null;
-        const streamTitle = track?.streamTitle || streamContent || null;
+        const streamTitle = this._cleanStreamText(track?.streamTitle) || streamContent || null;
 
         // Determine display title and artist depending on source type
         let displayTitle;
@@ -678,7 +730,7 @@ module.exports = NodeHelper.create({
           displayArtist = null;
         } else if (isRadioSource) {
           // track.title for a radio stream is often a raw URI or empty — prefer stationName
-          const rawTitle = track?.title || '';
+          const rawTitle = this._cleanStreamText(track?.title) || '';
           const titleIsUseless =
             !rawTitle ||
             /^https?:\/\//i.test(rawTitle) ||
@@ -802,6 +854,9 @@ module.exports = NodeHelper.create({
   },
 
   _sendControlResult(zoneId, action, success, error) {
+    if (!success) {
+      Log.warn(`[MMM-Sonos] Control action "${action}" failed for zone ${zoneId}: ${error}`);
+    }
     this.sendSocketNotification('SONOS_CONTROL_RESULT', { zoneId, action, success, error: error || null });
   },
 

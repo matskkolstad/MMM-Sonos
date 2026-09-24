@@ -41,7 +41,7 @@ describe('_resolveMemberHost()', () => {
 describe('_mapFavorites()', () => {
   it('maps title/uri/id fields', () => {
     const result = helper._mapFavorites([{ id: 'FV:2/0', title: 'NRK P3', uri: 'x-sonosapi-hls:p3' }]);
-    assert.deepEqual(result, [{ id: 'FV:2/0', title: 'NRK P3', uri: 'x-sonosapi-hls:p3' }]);
+    assert.deepEqual(result, [{ id: 'FV:2/0', title: 'NRK P3', uri: 'x-sonosapi-hls:p3', metadata: '' }]);
   });
 
   it('drops favorites with no uri', () => {

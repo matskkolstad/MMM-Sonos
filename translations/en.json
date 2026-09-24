@@ -21,7 +21,7 @@
   "IDLE_LABEL": "Nothing playing",
   "CLOSE": "Close",
   "NO_FAVORITES": "No favorites found — add some in the Sonos app",
-  "CONTROL_ERROR": "Could not reach speaker",
+  "CONTROL_ERROR": "Could not complete the action",
   "ZONE_UNAVAILABLE": "This speaker is no longer available",
   "MORE_SPEAKERS": "More speakers",
   "SPEAKERS": "Speakers",

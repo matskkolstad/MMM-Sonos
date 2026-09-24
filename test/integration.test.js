@@ -152,6 +152,27 @@ describe('node_helper against the Sonos simulator', () => {
     });
   });
 
+  describe('stream status texts', () => {
+    it('never shows Sonos status placeholders such as ZPSTR_CONNECTING (reported on a real system)', async () => {
+      const scenario = loadScenario('real-radio');
+      scenario.groups[1].track.streamContent = 'ZPSTR_CONNECTING';
+      sim.setScenario(scenario);
+      const groups = await fetchGroups();
+      const kitchen = byName(groups, 'Kjøkken');
+      assert.equal(kitchen.title, 'P4 Lyden av Norge');
+      assert.equal(kitchen.artist, null);
+      assert.equal(kitchen.streamTitle, null);
+    });
+
+    it('also hides ZPSTR_BUFFERING for a stream without a station name', async () => {
+      const scenario = loadScenario('real-radio');
+      scenario.groups[2].track.title = 'ZPSTR_BUFFERING';
+      sim.setScenario(scenario);
+      const groups = await fetchGroups();
+      assert.equal(byName(groups, 'Stue').title, 'Radio');
+    });
+  });
+
   describe('load on the speakers', () => {
     const countBy = (requests) => requests.reduce((acc, r) => ({ ...acc, [r.action]: (acc[r.action] || 0) + 1 }), {});
 
@@ -291,7 +312,7 @@ describe('node_helper against the Sonos simulator', () => {
 
     it('loads the Sonos favorites', async () => {
       await helper._refreshFavorites();
-      assert.deepEqual(helper.favorites.map((f) => f.title), ['NRK P3', 'P4 Lyden av Norge', 'Radio Norge']);
+      assert.deepEqual(helper.favorites.map((f) => f.title), ['NRK P3', 'P4 Lyden av Norge', 'Radio Norge', "Today's Top Hits"]);
       assert.equal(helper.notifications.at(-1).notification, 'SONOS_FAVORITES');
     });
 
@@ -304,6 +325,35 @@ describe('node_helper against the Sonos simulator', () => {
       assert.equal(zone('Office').playbackState, 'playing');
       assert.equal(zone('Office').title, 'NRK P3');
       assert.equal(zone('Office').source, 'radio');
+    });
+
+    it('plays a Spotify playlist favorite through the queue (reported on a real system)', async () => {
+      await helper._refreshFavorites();
+      const playlist = helper.favorites.find((f) => f.title === "Today's Top Hits");
+      await helper._handlePlayFavorite(zone('Office').id, playlist.id);
+      await settle();
+      assert.equal(lastResult().success, true, `favorite failed: ${lastResult().error}`);
+      assert.equal(zone('Office').playbackState, 'playing');
+      assert.equal(zone('Office').title, 'Die With A Smile');
+      assert.equal(zone('Office').source, 'spotify');
+    });
+
+    it('replaces the queue when a playlist favorite is played again', async () => {
+      await helper._refreshFavorites();
+      const playlist = helper.favorites.find((f) => f.title === "Today's Top Hits");
+      await helper._handlePlayFavorite(zone('Office').id, playlist.id);
+      await settle();
+      await helper._handlePlayFavorite(zone('Office').id, playlist.id);
+      await settle();
+      assert.equal(sim.queues.get('RINCON_SIM000000000001404').length, 2);
+    });
+
+    it('sends the favorite metadata along, so the station name is known', async () => {
+      await helper._refreshFavorites();
+      const p4 = helper.favorites.find((f) => f.title === 'P4 Lyden av Norge');
+      await helper._handlePlayFavorite(zone('Bedroom').id, p4.id);
+      await settle();
+      assert.equal(zone('Bedroom').title, 'P4 Lyden av Norge');
     });
 
     it('reports an error for an unknown zone without contacting any speaker', async () => {
