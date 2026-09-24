@@ -270,7 +270,12 @@ describe('MagicMirror² end-to-end', { timeout: 180000 }, () => {
 
     it('shows playback progress for a track with a known duration', () => {
       const card = cardFor(state.row, UUID.livingRoom);
-      assert.match(card.text, /\b1:3\d \/ 3:42\b/); // started at 1:35 of 3:42 in the simulator
+      const match = card.text.match(/\b(\d+):(\d\d) \/ 3:42\b/);
+      assert.ok(match, `no "m:ss / 3:42" progress in: ${card.text}`);
+      // The simulator starts this track at 1:35 and advances it in real time, so the
+      // exact value depends on how long startup took; it must lie between start and end.
+      const seconds = Number(match[1]) * 60 + Number(match[2]);
+      assert.ok(seconds >= 95 && seconds <= 222, `position ${match[0]} outside 1:35–3:42`);
     });
 
     it('shows no progress bar for radio', () => {
