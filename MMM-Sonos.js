@@ -77,7 +77,8 @@ Module.register('MMM-Sonos', {
     this._fullUpdateDebounceTimer = null;
 
   this._log('Starting MMM-Sonos module');
-    this.sendSocketNotification('SONOS_CONFIG', this.config);
+    // instanceId lets node_helper keep each instance's settings apart (it is shared).
+    this.sendSocketNotification('SONOS_CONFIG', { ...this.config, instanceId: this.identifier });
     this.scheduleRefresh();
     this._startProgressAnimation();
   },

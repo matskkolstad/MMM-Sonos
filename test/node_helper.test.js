@@ -482,3 +482,45 @@ describe('_cacheAlbumArt()', () => {
     assert.equal(await helper._cacheAlbumArt(url), url);
   });
 });
+
+describe('_mergeInstanceConfig() – several MMM-Sonos instances share one node_helper', () => {
+  it('keeps the latest instance config for shared options', () => {
+    const helper = loadNodeHelper();
+    helper._mergeInstanceConfig({ instanceId: 'a', updateInterval: 10000 });
+    const merged = helper._mergeInstanceConfig({ instanceId: 'b', updateInterval: 20000 });
+    assert.equal(merged.updateInterval, 20000);
+    assert.equal(merged.instanceId, undefined);
+  });
+
+  it('enables albumArtColors when any instance enables it, regardless of order', () => {
+    const helper = loadNodeHelper();
+    helper._mergeInstanceConfig({ instanceId: 'fullscreen', albumArtColors: true });
+    const merged = helper._mergeInstanceConfig({ instanceId: 'row', albumArtColors: false });
+    assert.equal(merged.albumArtColors, true);
+  });
+
+  it('includes paused groups when any instance has showWhenPaused', () => {
+    const helper = loadNodeHelper();
+    helper._mergeInstanceConfig({ instanceId: 'a', showWhenPaused: true });
+    assert.equal(helper._mergeInstanceConfig({ instanceId: 'b', showWhenPaused: false }).showWhenPaused, true);
+  });
+
+  it('hides a speaker in node_helper only when every instance hides it', () => {
+    const helper = loadNodeHelper();
+    helper._mergeInstanceConfig({ instanceId: 'a', hiddenSpeakers: ['Bad', 'Kjøkken'] });
+    const merged = helper._mergeInstanceConfig({ instanceId: 'b', hiddenSpeakers: ['bad'] });
+    assert.deepEqual(merged.hiddenSpeakers, ['bad']);
+  });
+
+  it('replaces an instance config when the same instance reconnects', () => {
+    const helper = loadNodeHelper();
+    helper._mergeInstanceConfig({ instanceId: 'a', albumArtColors: true });
+    assert.equal(helper._mergeInstanceConfig({ instanceId: 'a', albumArtColors: false }).albumArtColors, false);
+  });
+
+  it('drops the config.js startup fallback once a real instance connects', () => {
+    const helper = loadNodeHelper();
+    helper._mergeInstanceConfig({ albumArtColors: true }); // fallback read from config.js
+    assert.equal(helper._mergeInstanceConfig({ instanceId: 'a', albumArtColors: false }).albumArtColors, false);
+  });
+});

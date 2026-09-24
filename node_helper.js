@@ -44,7 +44,7 @@ module.exports = NodeHelper.create({
 
     const fallbackConfig = this._readConfigFromFile();
     if (fallbackConfig) {
-      this._configure(fallbackConfig).catch((error) => {
+      this._configure(this._mergeInstanceConfig(fallbackConfig)).catch((error) => {
         this.sendError('Failed to start MMM-Sonos with fallback config', error);
       });
     }
@@ -57,7 +57,7 @@ module.exports = NodeHelper.create({
   socketNotificationReceived(notification, payload) {
     switch (notification) {
       case 'SONOS_CONFIG':
-        this._configure(payload || {});
+        this._configure(this._mergeInstanceConfig(payload || {}));
         break;
       case 'SONOS_REQUEST':
         this._refresh();
@@ -67,6 +67,42 @@ module.exports = NodeHelper.create({
         this.sendSocketNotification('SONOS_CACHE_CLEARED', { timestamp: Date.now() });
         break;
     }
+  },
+
+  // node_helper is shared by every MMM-Sonos instance on the mirror, but each instance
+  // sends its own config. Remember them all and combine the options that decide what
+  // node_helper fetches, so one instance's settings do not switch features off for another.
+  // Each instance still applies its own filters (allowed/hidden speakers, paused groups)
+  // in the browser.
+  _mergeInstanceConfig(config) {
+    if (!this.instanceConfigs) {
+      this.instanceConfigs = new Map();
+    }
+    const { instanceId, ...instanceConfig } = config;
+    if (instanceId) {
+      // The config.js fallback read at startup is superseded once real instances connect.
+      this.instanceConfigs.delete('config.js');
+    }
+    this.instanceConfigs.set(instanceId || 'config.js', instanceConfig);
+    return this._combineConfigs([...this.instanceConfigs.values()]);
+  },
+
+  _combineConfigs(configs) {
+    const latest = configs[configs.length - 1] || {};
+    const anyEnabled = (key) => configs.some((c) => !!c[key]);
+    // Hide a speaker/group in node_helper only when every instance hides it.
+    const hiddenByAll = (key) => {
+      const lists = configs.map((c) => (Array.isArray(c[key]) ? c[key].map((v) => String(v).toLowerCase()) : []));
+      return lists.length ? lists.reduce((acc, list) => acc.filter((v) => list.includes(v))) : [];
+    };
+    return {
+      ...latest,
+      showWhenPaused: anyEnabled('showWhenPaused'),
+      albumArtColors: anyEnabled('albumArtColors'),
+      debug: anyEnabled('debug'),
+      hiddenSpeakers: hiddenByAll('hiddenSpeakers'),
+      hiddenGroups: hiddenByAll('hiddenGroups')
+    };
   },
 
   async _configure(config) {
