@@ -302,7 +302,9 @@ Module.register('MMM-Sonos', {
       const targetGroup = this._resolveFullscreenGroup();
       groupsToRender = targetGroup ? [this._renderFullscreenGroup(targetGroup)].filter(Boolean) : [];
     } else {
+      // Filter before applying maxGroups so hidden or paused groups do not use up slots.
       groupsToRender = this.groups
+        .filter((group) => this._isGroupVisible(group))
         .slice(0, this.config.maxGroups)
         .map((group) => isMiniMode ? this._renderMiniGroup(group) : this._renderGroup(group))
         .filter(Boolean);
@@ -1367,7 +1369,8 @@ Module.register('MMM-Sonos', {
   },
 
   // Resolve which group to show in fullscreen mode.
-  // If fullscreenSpeaker is configured, find the matching group; otherwise use the first group.
+  // If fullscreenSpeaker is configured, find the matching group; otherwise use the first
+  // group this instance would show (respecting allowed/hidden filters and showWhenPaused).
   _resolveFullscreenGroup() {
     if (!this.groups || !this.groups.length) {
       return null;
@@ -1376,15 +1379,30 @@ Module.register('MMM-Sonos', {
     const speaker = (this.config.fullscreenSpeaker || '').toLowerCase().trim();
     if (speaker) {
       const match = this.groups.find((g) =>
-        (g.name || '').toLowerCase() === speaker ||
-        (g.id || '').toLowerCase() === speaker ||
-        (g.coordinatorHost || '').toLowerCase() === speaker ||
-        (g.members || []).some((m) => m.toLowerCase() === speaker)
+        !this._isHidden(g) && (
+          (g.name || '').toLowerCase() === speaker ||
+          (g.id || '').toLowerCase() === speaker ||
+          (g.coordinatorHost || '').toLowerCase() === speaker ||
+          (g.members || []).some((m) => m.toLowerCase() === speaker)
+        )
       );
-      return match || this.groups[0];
+      if (match) {
+        return match;
+      }
     }
 
-    return this.groups[0];
+    return this.groups.find((g) => this._isGroupVisible(g)) || null;
+  },
+
+  // True when this instance would render the group: not filtered out by the
+  // allowed/hidden lists, and playing (or paused with showWhenPaused enabled).
+  _isGroupVisible(group) {
+    if (!group || this._isHidden(group)) {
+      return false;
+    }
+    const playbackState = (group.playbackState || '').toLowerCase();
+    const isPlaying = ['playing', 'transitioning', 'buffering'].includes(playbackState);
+    return isPlaying || !!this.config.showWhenPaused;
   },
 
   // Render a large, full-width card for fullscreen mode.

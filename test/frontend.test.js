@@ -216,9 +216,9 @@ describe('_resolveDisplayMode()', () => {
 
 describe('_resolveFullscreenGroup()', () => {
   const groups = [
-    { id: 'RINCON_A:1', name: 'Stue', coordinatorHost: '192.168.1.10', members: ['Stue', 'Hall'] },
-    { id: 'RINCON_B:1', name: 'Kjøkken', coordinatorHost: '192.168.1.20', members: ['Kjøkken'] },
-    { id: 'RINCON_C:1', name: 'Soverom', coordinatorHost: '192.168.1.30', members: ['Soverom'] }
+    { id: 'RINCON_A:1', name: 'Stue', coordinatorHost: '192.168.1.10', members: ['Stue', 'Hall'], playbackState: 'playing' },
+    { id: 'RINCON_B:1', name: 'Kjøkken', coordinatorHost: '192.168.1.20', members: ['Kjøkken'], playbackState: 'playing' },
+    { id: 'RINCON_C:1', name: 'Soverom', coordinatorHost: '192.168.1.30', members: ['Soverom'], playbackState: 'playing' }
   ];
   const resolve = (fullscreenSpeaker, groupList = groups, extraConfig = {}) => {
     const mod = loadFrontendModule({ fullscreenSpeaker, ...extraConfig });
@@ -260,6 +260,59 @@ describe('_resolveFullscreenGroup()', () => {
 
   it('returns null when groups is null', () => {
     assert.equal(resolve(null, null), null);
+  });
+
+  // Previously the first group was picked even when allowedSpeakers hid it, so fullscreen
+  // showed "No speakers are visible" although the allowed speaker was playing.
+  it('picks the first group allowed by allowedSpeakers, not the first group overall', () => {
+    assert.equal(resolve(null, groups, { allowedSpeakers: ['Kjøkken'] }), groups[1]);
+  });
+
+  it('skips groups hidden by hiddenSpeakers', () => {
+    assert.equal(resolve(null, groups, { hiddenSpeakers: ['Stue'] }), groups[1]);
+  });
+
+  it('skips paused groups unless showWhenPaused is enabled', () => {
+    const withPaused = [{ ...groups[0], playbackState: 'paused' }, groups[1]];
+    assert.equal(resolve(null, withPaused), withPaused[1]);
+    assert.equal(resolve(null, withPaused, { showWhenPaused: true }), withPaused[0]);
+  });
+
+  it('does not pick a pinned speaker that allowedSpeakers hides', () => {
+    assert.equal(resolve('Stue', groups, { allowedSpeakers: ['Soverom'] }), groups[2]);
+  });
+
+  it('keeps a pinned speaker even when it is paused (renders nothing instead of switching)', () => {
+    const withPaused = [groups[0], { ...groups[1], playbackState: 'paused' }];
+    assert.equal(resolve('Kjøkken', withPaused), withPaused[1]);
+  });
+
+  it('returns null when no group is visible', () => {
+    assert.equal(resolve(null, groups, { allowedSpeakers: ['Bad'] }), null);
+  });
+});
+
+describe('_isGroupVisible()', () => {
+  const group = makeGroup({ name: 'Stue', members: ['Stue'] });
+
+  it('is true for a playing group without filters', () => {
+    assert.equal(loadFrontendModule()._isGroupVisible(group), true);
+  });
+
+  it('is true for transitioning and buffering groups', () => {
+    const mod = loadFrontendModule();
+    assert.equal(mod._isGroupVisible({ ...group, playbackState: 'transitioning' }), true);
+    assert.equal(mod._isGroupVisible({ ...group, playbackState: 'buffering' }), true);
+  });
+
+  it('is false for a paused group unless showWhenPaused is enabled', () => {
+    const paused = { ...group, playbackState: 'paused' };
+    assert.equal(loadFrontendModule()._isGroupVisible(paused), false);
+    assert.equal(loadFrontendModule({ showWhenPaused: true })._isGroupVisible(paused), true);
+  });
+
+  it('is false for a group filtered out by allowedSpeakers', () => {
+    assert.equal(loadFrontendModule({ allowedSpeakers: ['Kjøkken'] })._isGroupVisible(group), false);
   });
 });
 

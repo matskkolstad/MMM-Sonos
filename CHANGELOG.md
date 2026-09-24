@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Track title missing for Apple Music and Amazon Music (#53)** — on-demand tracks from these services (track URIs starting with `x-sonosapi-hls-static:`) were detected as radio, so the album name was shown in place of the track title (and twice with `showAlbum: true`). Only real radio stream URIs are treated as radio now, and Apple Music/Spotify are also recognised by their Sonos service id. Local files whose path contains "/radio" (e.g. *Radiohead*) are no longer detected as radio either.
 
+- **Fullscreen mode showed "No speakers are visible" with `allowedSpeakers`/`hiddenSpeakers`** — the fullscreen card always used the first group (alphabetically), even when that group was filtered out for the instance, so nothing was shown although an allowed speaker was playing. It now picks the first group the instance actually shows (and skips paused groups unless `showWhenPaused` is on). A pinned `fullscreenSpeaker` is still honoured.
+- **`maxGroups` counted hidden and paused groups** — the limit was applied before the per-instance filters (and additionally in `node_helper`), so hidden groups could use up the slots and push allowed groups out. The limit is now applied after filtering, per instance.
+
 ### Security
 - Applied non-breaking `npm audit` fixes to the lockfile (axios 1.13.1 → 1.20.0, follow-redirects, form-data, brace-expansion).
 

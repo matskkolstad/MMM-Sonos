@@ -484,8 +484,9 @@ module.exports = NodeHelper.create({
         this.sendDebug('Failed to fetch data for group', name || id, error?.message || error);
       }
     }
-  const ordered = formatted.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    return ordered.slice(0, this.config.maxGroups || ordered.length);
+    // maxGroups is applied by each frontend instance after its own allowed/hidden
+    // filters; limiting here could drop the only group an instance is allowed to show.
+    return formatted.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   },
 
   _resolveCoordinator(group) {
