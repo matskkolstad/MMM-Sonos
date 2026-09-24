@@ -307,6 +307,7 @@ module.exports = NodeHelper.create({
     } catch (error) {
       this.sendError('Failed to fetch Sonos data', error);
       this.coordinator = null; // Force re-discovery on the next refresh
+      this.lastPayloadAt = null; // Answer the next request with a fresh poll, not old data
     }
   },
 

@@ -177,6 +177,25 @@ describe('node_helper against the Sonos simulator', () => {
     });
   });
 
+  describe('speaker errors', () => {
+    it('polls again on the next request after a failed refresh instead of replaying old data', async () => {
+      sim.setScenario(loadScenario('mixed-sources'));
+      const helper = loadNodeHelper({ ...baseConfig, updateInterval: 5000 });
+      helper.coordinator = await helper._discoverViaKnownDevices();
+      await helper._refresh();
+
+      helper.coordinator = { getAllGroups: async () => { throw new Error('speaker offline'); } };
+      await helper._refresh();
+      assert.equal(helper.notifications.at(-1).notification, 'SONOS_ERROR');
+
+      helper.coordinator = await helper._discoverViaKnownDevices();
+      sim.requests = [];
+      helper.socketNotificationReceived('SONOS_REQUEST');
+      await helper._refreshPromise;
+      assert.ok(sim.requests.some((r) => r.action === 'GetZoneGroupState'), 'the request polled the speakers');
+    });
+  });
+
   describe('maxGroups', () => {
     it('is not applied by node_helper (each frontend instance applies it after its own filters)', async () => {
       sim.setScenario(loadScenario('mixed-sources'));
