@@ -1041,9 +1041,65 @@ Module.register('MMM-Sonos', {
       pause: '<path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill="currentColor"/>',
       close: '<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
       speaker: '<path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>' +
-        '<path d="M15.5 9.5a3.5 3.5 0 0 1 0 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'
+        '<path d="M15.5 9.5a3.5 3.5 0 0 1 0 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
+      previous: '<path d="M6 6h2.2v12H6zM9.5 12L18.5 18V6z" fill="currentColor"/>',
+      next: '<path d="M15.8 6H18v12h-2.2zM5.5 18l9-6-9-6z" fill="currentColor"/>',
+      shuffle: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+        '<path d="M4 7h3c2 0 3 1 4 2.5l2 3c1 1.5 2 2.5 4 2.5h3"/><path d="M17.5 12.5L20 15l-2.5 2.5"/>' +
+        '<path d="M4 17h3c1.2 0 2-.4 2.8-1.1"/><path d="M14.2 8.1C15 7.4 15.8 7 17 7h3"/><path d="M17.5 4.5L20 7l-2.5 2.5"/></g>',
+      repeat: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+        '<path d="M5 11.5V10a3 3 0 0 1 3-3h11"/><path d="M16.5 4.5L19 7l-2.5 2.5"/>' +
+        '<path d="M19 12.5V14a3 3 0 0 1-3 3H5"/><path d="M7.5 19.5L5 17l2.5-2.5"/></g>',
+      repeatOne: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+        '<path d="M5 11.5V10a3 3 0 0 1 3-3h11"/><path d="M16.5 4.5L19 7l-2.5 2.5"/>' +
+        '<path d="M19 12.5V14a3 3 0 0 1-3 3H5"/><path d="M7.5 19.5L5 17l2.5-2.5"/></g>' +
+        '<path d="M11 10.5l1.5-1v5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
+      volume: '<path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z" fill="currentColor"/>' +
+        '<path d="M15.5 9.5a3.5 3.5 0 0 1 0 5M18 7a7 7 0 0 1 0 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+      muted: '<path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z" fill="currentColor"/>' +
+        '<path d="M15.5 9.5l5 5M20.5 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>'
     };
     return `<svg class="mmm-sonos__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${paths[name] || ''}</svg>`;
+  },
+
+  _createIconButton(className, icon, label) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `mmm-sonos__overlay-icon-btn ${className}`;
+    button.innerHTML = this._iconSvg(icon);
+    button.setAttribute('aria-label', label);
+    button.title = label;
+    return button;
+  },
+
+  _setToggleState(button, active) {
+    button.setAttribute('aria-pressed', String(Boolean(active)));
+    button.classList.toggle('mmm-sonos__overlay-icon-btn--active', Boolean(active));
+  },
+
+  _setRepeatButton(button, repeat) {
+    button.dataset.repeat = repeat;
+    button.innerHTML = this._iconSvg(repeat === 'one' ? 'repeatOne' : 'repeat');
+    this._setToggleState(button, repeat !== 'none');
+  },
+
+  _setMuteButton(button, muted) {
+    button.dataset.muted = String(Boolean(muted));
+    button.innerHTML = this._iconSvg(muted ? 'muted' : 'volume');
+    const label = this.translate(muted ? 'UNMUTE' : 'MUTE');
+    button.setAttribute('aria-label', label);
+    button.title = label;
+    this._setToggleState(button, Boolean(muted));
+  },
+
+  // Radio and TV have no queue: hide previous/next/shuffle/repeat instead of offering
+  // buttons Sonos would reject.
+  _applySkipAvailability(transport, group) {
+    const canSkip = group.canSkip !== false;
+    transport.querySelectorAll('.mmm-sonos__overlay-shuffle, .mmm-sonos__overlay-previous, .mmm-sonos__overlay-next, .mmm-sonos__overlay-repeat')
+      .forEach((button) => {
+        button.hidden = !canSkip;
+      });
   },
 
   _setPlayPauseIcon(button, isPlaying) {
@@ -1234,7 +1290,41 @@ Module.register('MMM-Sonos', {
       // open (see _locateActiveGroup), and this handler is never rebuilt, only synced.
       this.sendSocketNotification(notification, { zoneId: this._activeControlZoneId });
     });
-    sheet.appendChild(playPauseBtn);
+
+    // Shuffle · previous · play/pause · next · repeat. Skipping and play modes need a
+    // queue, so those buttons are hidden for radio and TV (group.canSkip).
+    const shuffleBtn = this._createIconButton('mmm-sonos__overlay-shuffle', 'shuffle', this.translate('SHUFFLE'));
+    this._setToggleState(shuffleBtn, group.shuffle);
+    shuffleBtn.addEventListener('click', () => {
+      const shuffle = shuffleBtn.getAttribute('aria-pressed') !== 'true';
+      this._setToggleState(shuffleBtn, shuffle);
+      this.sendSocketNotification('SONOS_CONTROL_SET_SHUFFLE', { zoneId: this._activeControlZoneId, shuffle });
+    });
+
+    const previousBtn = this._createIconButton('mmm-sonos__overlay-previous', 'previous', this.translate('PREVIOUS'));
+    previousBtn.addEventListener('click', () => {
+      this.sendSocketNotification('SONOS_CONTROL_PREVIOUS', { zoneId: this._activeControlZoneId });
+    });
+
+    const nextBtn = this._createIconButton('mmm-sonos__overlay-next', 'next', this.translate('NEXT'));
+    nextBtn.addEventListener('click', () => {
+      this.sendSocketNotification('SONOS_CONTROL_NEXT', { zoneId: this._activeControlZoneId });
+    });
+
+    const repeatBtn = this._createIconButton('mmm-sonos__overlay-repeat', 'repeat', this.translate('REPEAT'));
+    this._setRepeatButton(repeatBtn, group.repeat || 'none');
+    repeatBtn.addEventListener('click', () => {
+      // off → repeat all → repeat one → off, like the Sonos app
+      const next = { none: 'all', all: 'one', one: 'none' }[repeatBtn.dataset.repeat] || 'all';
+      this._setRepeatButton(repeatBtn, next);
+      this.sendSocketNotification('SONOS_CONTROL_SET_REPEAT', { zoneId: this._activeControlZoneId, repeat: next });
+    });
+
+    const transport = document.createElement('div');
+    transport.className = 'mmm-sonos__overlay-transport';
+    [shuffleBtn, previousBtn, playPauseBtn, nextBtn, repeatBtn].forEach((btn) => transport.appendChild(btn));
+    sheet.appendChild(transport);
+    this._applySkipAvailability(transport, group);
 
     const volumeRow = document.createElement('div');
     volumeRow.className = 'mmm-sonos__overlay-volume';
@@ -1255,6 +1345,14 @@ Module.register('MMM-Sonos', {
       // See the play/pause handler above — use the live zone id, not `group.id`.
       this._debounceSetVolume(this._activeControlZoneId, Number(slider.value));
     });
+    const muteBtn = this._createIconButton('mmm-sonos__overlay-mute', 'volume', this.translate('MUTE'));
+    this._setMuteButton(muteBtn, group.muted);
+    muteBtn.addEventListener('click', () => {
+      const muted = muteBtn.dataset.muted !== 'true';
+      this._setMuteButton(muteBtn, muted);
+      this.sendSocketNotification('SONOS_CONTROL_SET_MUTE', { zoneId: this._activeControlZoneId, muted });
+    });
+    volumeRow.appendChild(muteBtn);
     volumeRow.appendChild(slider);
     volumeRow.appendChild(volumeLabel);
     sheet.appendChild(volumeRow);
@@ -1325,7 +1423,15 @@ Module.register('MMM-Sonos', {
         this._updateSliderFill(slider);
         this._debounceSetMemberVolume(group.id, member.name, Number(slider.value));
       });
+      const memberMuteBtn = this._createIconButton('mmm-sonos__overlay-member-mute', 'volume', this.translate('MUTE'));
+      this._setMuteButton(memberMuteBtn, member.muted);
+      memberMuteBtn.addEventListener('click', () => {
+        const muted = memberMuteBtn.dataset.muted !== 'true';
+        this._setMuteButton(memberMuteBtn, muted);
+        this.sendSocketNotification('SONOS_CONTROL_SET_MEMBER_MUTE', { zoneId: this._activeControlZoneId, memberName: member.name, muted });
+      });
       row.appendChild(label);
+      row.appendChild(memberMuteBtn);
       row.appendChild(slider);
       row.appendChild(volumeLabel);
       list.appendChild(row);
@@ -1351,6 +1457,24 @@ Module.register('MMM-Sonos', {
     if (playPauseBtn) {
       const isPlaying = ['playing', 'transitioning', 'buffering'].includes((group.playbackState || '').toLowerCase());
       this._setPlayPauseIcon(playPauseBtn, isPlaying);
+    }
+
+    const transport = this._controlOverlayEl.querySelector('.mmm-sonos__overlay-transport');
+    if (transport) {
+      this._applySkipAvailability(transport, group);
+      const shuffleBtn = transport.querySelector('.mmm-sonos__overlay-shuffle');
+      if (shuffleBtn && group.shuffle != null) {
+        this._setToggleState(shuffleBtn, group.shuffle);
+      }
+      const repeatBtn = transport.querySelector('.mmm-sonos__overlay-repeat');
+      if (repeatBtn && group.repeat) {
+        this._setRepeatButton(repeatBtn, group.repeat);
+      }
+    }
+
+    const muteBtn = this._controlOverlayEl.querySelector('.mmm-sonos__overlay-mute');
+    if (muteBtn && group.muted != null) {
+      this._setMuteButton(muteBtn, group.muted);
     }
 
     const slider = this._controlOverlayEl.querySelector('.mmm-sonos__overlay-volume-slider');
@@ -1380,6 +1504,10 @@ Module.register('MMM-Sonos', {
         if (!row) return;
         const memberSlider = row.querySelector('.mmm-sonos__overlay-member-volume-slider');
         const memberLabel = row.querySelector('.mmm-sonos__overlay-member-volume-label');
+        const memberMuteBtn = row.querySelector('.mmm-sonos__overlay-member-mute');
+        if (memberMuteBtn && member.muted != null) {
+          this._setMuteButton(memberMuteBtn, member.muted);
+        }
         if (memberSlider && document.activeElement !== memberSlider && member.volume != null) {
           memberSlider.value = String(member.volume);
           this._updateSliderFill(memberSlider);

@@ -8,8 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Previous/next, shuffle, repeat and mute in touch control mode** — the control overlay has a transport row (shuffle · previous · play/pause · next · repeat) and mute buttons for the group and for each speaker. Previous/next, shuffle and repeat are hidden for radio and TV.
 - **Touch control mode** (`enableControls: true`, by [@AndreasHagman](https://github.com/AndreasHagman) in #68) — tap a card to open a control overlay with play/pause, group volume, per-speaker volume, grouping/ungrouping of speakers and your Sonos favorites. Idle speakers are shown as cards (`controlShowIdleZones`) or behind a "+" tile. New options: `enableControls`, `controlShowIdleZones`, `favoritesRefreshInterval`, `maxFavorites`, `controlVolumeStep`. Off by default; nothing changes for existing setups.
 - End-to-end test for touch control mode, and control actions in the Sonos simulator.
+
+### Changed
+- After grouping, ungrouping or starting a favorite, the module checks again after 1.5 and 3.5 seconds, so the result shows up as soon as Sonos has finished instead of at the next regular update.
 
 ### Fixed
 - **Playlist and album favorites did not start** in touch control mode ("could not reach speaker"). They are now played through the queue like in the Sonos app, and all favorites are sent with the metadata Sonos stores for them.

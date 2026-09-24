@@ -826,6 +826,58 @@
   cursor: pointer;
 }
 
+/* Shuffle · previous · play/pause · next · repeat */
+.mmm-sonos__overlay-transport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+}
+
+/* Small round icon buttons: previous/next, shuffle/repeat and mute */
+.mmm-sonos__overlay-icon-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.3em;
+  height: 2.3em;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  font-size: 1.05em;
+  opacity: 0.85;
+  cursor: pointer;
+  transition: background 0.3s ease, opacity 0.3s ease;
+}
+
+.mmm-sonos__overlay-icon-btn[hidden] {
+  display: none;
+}
+
+.mmm-sonos__overlay-shuffle,
+.mmm-sonos__overlay-repeat {
+  font-size: 0.9em;
+  opacity: 0.45;
+}
+
+/* Shuffle/repeat on, or muted: same highlight as an active card */
+.mmm-sonos__overlay-icon-btn--active {
+  opacity: 1;
+  background: var(--mmm-sonos-active);
+}
+
+.mmm-sonos__overlay-mute,
+.mmm-sonos__overlay-member-mute {
+  font-size: 0.9em;
+}
+
+.mmm-sonos__overlay-member-mute {
+  width: 1.9em;
+  height: 1.9em;
+}
+
 /* ---- volume sliders: same 4px track as the progress bar ---- */
 
 .mmm-sonos__overlay-volume,
