@@ -346,7 +346,7 @@ module.exports = NodeHelper.create({
 
       this.lastPayload = formatted;
       this.lastPayloadAt = Date.now();
-      if (this.config.enableControls && !this._favoritesLoaded) {
+      if (this.config.enableControls && !this._favoritesLoaded && Date.now() >= (this._favoritesRetryAt || 0)) {
         this._refreshFavorites();
       }
       this.sendSocketNotification('SONOS_DATA', {
@@ -375,41 +375,73 @@ module.exports = NodeHelper.create({
     return this._favoritesPromise;
   },
 
-  async _fetchFavorites() {
-    try {
-      // Browse FV:2 directly instead of getFavorites(): the latter drops the metadata
-      // (<r:resMD>) Sonos stores with each favorite, which is needed to play playlists
-      // and most service favorites.
-      const result = await this.coordinator.contentDirectoryService().Browse({
-        ObjectID: 'FV:2',
-        BrowseFlag: 'BrowseDirectChildren',
-        Filter: '*',
-        StartingIndex: '0',
-        RequestedCount: '100',
-        SortCriteria: ''
-      });
-      const didl = await SonosHelpers.ParseXml(result?.Result || '');
-      const items = didl?.['DIDL-Lite']?.item;
-      this.favorites = this._mapFavorites(
-        (Array.isArray(items) ? items : items ? [items] : []).map((item) => ({
-          id: item.id,
-          title: item['dc:title'],
-          uri: typeof item.res === 'object' ? item.res?._ : item.res,
-          metadata: item['r:resMD'] || ''
-        }))
-      );
-      this._favoritesLoaded = true;
-      this.sendSocketNotification('SONOS_FAVORITES', { favorites: this.favorites, timestamp: Date.now() });
-    } catch (error) {
-      Log.warn(`[MMM-Sonos] Could not load Sonos favorites: ${this._describeError(error)}`);
+  // Favorites are the same for the whole household, but not every device can list them
+  // (a Sub, surround speakers or a Boost answer with an error). Try the speaker found at
+  // discovery first, then each zone coordinator.
+  _favoritesSources() {
+    const sources = [this.coordinator];
+    const seen = new Set([`${this.coordinator?.host}:${this.coordinator?.port || 1400}`]);
+    for (const zone of this.lastPayload || []) {
+      const key = `${zone.coordinatorHost}:${zone.coordinatorPort || 1400}`;
+      if (zone.coordinatorHost && !seen.has(key)) {
+        seen.add(key);
+        sources.push(new Sonos(zone.coordinatorHost, zone.coordinatorPort || 1400));
+      }
     }
+    return sources.filter(Boolean);
+  },
+
+  async _fetchFavorites() {
+    let lastError = null;
+    for (const source of this._favoritesSources()) {
+      try {
+        this.favorites = await this._browseFavorites(source);
+        this._favoritesLoaded = true;
+        this._favoritesRetryAt = 0;
+        this.sendSocketNotification('SONOS_FAVORITES', { favorites: this.favorites, timestamp: Date.now() });
+        return;
+      } catch (error) {
+        lastError = error;
+        this.sendDebug('Could not load favorites from', source.host, this._describeError(error));
+      }
+    }
+    // Do not ask again on every refresh; try again in 30 s.
+    this._favoritesRetryAt = Date.now() + 30 * 1000;
+    Log.warn(`[MMM-Sonos] Could not load Sonos favorites: ${this._describeError(lastError)}`);
+  },
+
+  async _browseFavorites(source) {
+    // Browse FV:2 directly instead of getFavorites(): the latter drops the metadata
+    // (<r:resMD>) Sonos stores with each favorite, which is needed to play playlists
+    // and most service favorites.
+    const result = await source.contentDirectoryService().Browse({
+      ObjectID: 'FV:2',
+      BrowseFlag: 'BrowseDirectChildren',
+      Filter: '*',
+      StartingIndex: '0',
+      RequestedCount: '100',
+      SortCriteria: ''
+    });
+    const didl = await SonosHelpers.ParseXml(result?.Result || '');
+    const items = didl?.['DIDL-Lite']?.item;
+    return this._mapFavorites(
+      (Array.isArray(items) ? items : items ? [items] : []).map((item) => ({
+        id: item.id,
+        title: item['dc:title'],
+        uri: typeof item.res === 'object' ? item.res?._ : item.res,
+        metadata: item['r:resMD'] || ''
+      }))
+    );
   },
 
   // Shorten UPnP errors (the sonos package includes the whole SOAP envelope) to their code.
   _describeError(error) {
     const message = error?.message || String(error);
     const code = message.match(/<errorCode>(\d+)<\/errorCode>/)?.[1];
-    return code ? `UPnP error ${code}` : message;
+    if (code) {
+      return `UPnP error ${code}`;
+    }
+    return /statusCode 500/.test(message) ? 'UPnP error (no code)' : message;
   },
 
   // Playlists, albums and similar favorites (x-rincon-cpcontainer:) cannot be set as the
@@ -432,7 +464,10 @@ module.exports = NodeHelper.create({
       }
     };
     if (this._isContainerFavorite(favorite)) {
-      const coordinatorUuid = String(zone.id || '').split(':')[0];
+      // A speaker can only play its own queue. The group ID does not tell which speaker
+      // that is: Sonos keeps the ID of the speaker that created the group, which after
+      // regrouping need not be the coordinator. Ask the speaker itself.
+      const coordinatorUuid = await step('identify speaker', () => this._speakerUuid(device, zone));
       await step('clear queue', () => device.flush());
       await step('add to queue', () => device.queue({ uri: favorite.uri, metadata }));
       await step('select queue', () => device.setAVTransportURI({ uri: `x-rincon-queue:${coordinatorUuid}#0`, metadata: '', onlySetUri: true }));
@@ -451,6 +486,19 @@ module.exports = NodeHelper.create({
     }
     const text = value.trim();
     return !text || /^ZPSTR_/i.test(text) ? null : text;
+  },
+
+  async _speakerUuid(device, zone) {
+    try {
+      const description = await device.deviceDescription();
+      const uuid = String(description?.UDN || '').replace(/^uuid:/, '');
+      if (uuid) {
+        return uuid;
+      }
+    } catch (error) {
+      this.sendDebug('Could not read device description', device.host, this._describeError(error));
+    }
+    return zone.coordinatorUuid || String(zone.id || '').split(':')[0];
   },
 
   _mapFavorites(items) {
@@ -859,6 +907,7 @@ module.exports = NodeHelper.create({
           name: name || coordinatorName || 'Sonos',
           coordinatorHost: coordinator.host || null,
           coordinatorPort: coordinator.port || 1400,
+          coordinatorUuid: typeof group.Coordinator === 'string' ? group.Coordinator : null,
           memberDetails: effectiveMemberDetails,
           playbackState: state,
           title: displayTitle,

@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Playlist and album favorites did not start** in touch control mode ("could not reach speaker"). They are now played through the queue like in the Sonos app, and all favorites are sent with the metadata Sonos stores for them.
 - **Paused cards flickered on every update** — a paused track's position stands still, which the module treated as a seek and re-animated the card each time. Affected paused cards with `showWhenPaused: true` as well.
 - Sonos status placeholders such as `ZPSTR_CONNECTING` / `ZPSTR_BUFFERING` are no longer shown as "now playing" text while a stream starts.
+- **Playlist favorites failed with UPnP 714 on regrouped speakers** — the queue was selected by the group ID, which Sonos keeps from the speaker that created the group. The speaker's own ID is now used.
+- **Favorites did not load** when the first speaker found was a device that cannot list them (e.g. a Sub, surround speaker or Boost); the zone coordinators are tried next, and failed attempts are retried every 30 s instead of on every update.
 - Failed control actions are now logged in the MagicMirror log, naming the step and favorite Sonos rejected.
 - Favorites could take up to `favoritesRefreshInterval` (5 minutes) to appear when the speakers were not found yet at startup; they now load as soon as the speakers are found, and a browser that connects later gets them right away.
 - The progress bar of a paused track no longer keeps counting up (#68).

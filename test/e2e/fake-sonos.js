@@ -425,6 +425,10 @@ class FakeSonos {
           return reply('');
         }
         if (uri.startsWith('x-rincon-queue:')) {
+          // A speaker can only play its own queue (x-rincon-queue:<its uuid>#0)
+          if (uri !== `x-rincon-queue:${speaker.uuid}#0`) {
+            return fault(res, 714);
+          }
           // Play from the queue: its first item becomes the current track
           const own = this.ensureOwnGroup(speaker.uuid);
           const first = (this.queues.get(speaker.uuid) || [])[0];
@@ -474,6 +478,12 @@ class FakeSonos {
         return reply('');
 
       case 'Browse': {
+        if (speaker.noFavorites) {
+          // e.g. a Sub, surround speaker or Boost: answers with an empty UPnP fault
+          res.writeHead(500);
+          res.end('');
+          return undefined;
+        }
         if (FakeSonos.soapValue(body, 'ObjectID') !== 'FV:2') {
           res.writeHead(500);
           res.end('Unsupported ObjectID');
@@ -524,7 +534,7 @@ class FakeSonos {
     const groups = (this.scenario?.groups || []).map((group) => {
       const members = group.members?.length ? group.members : [group.coordinator];
       members.forEach((uuid) => grouped.add(uuid));
-      return { coordinator: group.coordinator, members };
+      return { coordinator: group.coordinator, members, groupIdFrom: group.groupIdFrom };
     });
     // Every speaker that is not in a configured group is its own (idle) group, like on a real system.
     for (const uuid of speakers.keys()) {
@@ -549,7 +559,10 @@ class FakeSonos {
             );
           })
           .join('');
-        return `<ZoneGroup Coordinator="${group.coordinator}" ID="${group.coordinator}:${100 + index}">${membersXml}</ZoneGroup>`;
+        // Sonos keeps the ID of the speaker that created a group, so after regrouping the
+        // ID prefix is not necessarily the current coordinator (scenario: "groupIdFrom").
+        const idPrefix = group.groupIdFrom || group.coordinator;
+        return `<ZoneGroup Coordinator="${group.coordinator}" ID="${idPrefix}:${100 + index}">${membersXml}</ZoneGroup>`;
       })
       .join('');
 

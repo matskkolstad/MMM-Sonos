@@ -470,6 +470,8 @@ With `enableControls: true`:
   streams directly, playlists and albums by replacing the queue. If a
   favorite does not start, the reason is written to the MagicMirror log
   (`Control action "playFavorite" failed …`) — please include it in a report.
+- Sonos Radio station collections (such as "Discover Sonos Radio") are
+  stored without a playable address and are not listed.
 
 ## Additional features
 

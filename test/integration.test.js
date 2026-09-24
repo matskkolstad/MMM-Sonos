@@ -145,6 +145,28 @@ describe('node_helper against the Sonos simulator', () => {
       assert.equal(kitchen.artist, 'ABBA - Dancing Queen');
     });
 
+    it('lists the favorites that can be played and skips Sonos Radio entries without an address', async () => {
+      const helper = loadNodeHelper({ ...baseConfig, enableControls: true });
+      await helper._refresh();
+      await helper._favoritesPromise;
+      assert.deepEqual(helper.favorites.map((f) => f.title), ['NRK P3', 'P4 Lyden av Norge', 'Your Top Songs 2021']);
+    });
+
+    it('plays each of the real favorites: two radio streams and a Spotify playlist', async () => {
+      const helper = loadNodeHelper({ ...baseConfig, enableControls: true });
+      await helper._refresh();
+      await helper._favoritesPromise;
+      const stue = () => helper.lastPayload.find((g) => g.members.includes('Stue'));
+      for (const [title, expected] of [['NRK P3', 'NRK P3'], ['P4 Lyden av Norge', 'P4 Lyden av Norge'], ['Your Top Songs 2021', 'Levitating']]) {
+        const favorite = helper.favorites.find((f) => f.title === title);
+        await helper._handlePlayFavorite(stue().id, favorite.id);
+        const result = helper.notifications.filter((n) => n.notification === 'SONOS_CONTROL_RESULT').at(-1).payload;
+        assert.equal(result.success, true, `${title}: ${result.error}`);
+        await helper._refresh();
+        assert.equal(stue().title, expected);
+      }
+    });
+
     it('never shows the end of the stream URL ("P04_MM?args=…") as title', () => {
       const stue = byName(groups, 'Stue');
       assert.equal(stue.source, 'radio');
@@ -383,6 +405,45 @@ describe('node_helper against the Sonos simulator', () => {
       helper._isContainerFavorite = () => false; // force the stream path, which Sonos rejects for playlists
       await helper._handlePlayFavorite(zone('Office').id, playlist.id);
       assert.match(lastResult().error, /^play stream: UPnP error 714 \(favorite "Today's Top Hits", object\.container\.playlistContainer, x-rincon-cpcontainer:/);
+    });
+
+    // Reported on a real system: the group ID came from the speaker that created the
+    // group, so the queue of the wrong speaker was selected (UPnP 714 at "select queue").
+    it('plays a playlist on a group whose ID comes from another speaker', async () => {
+      const scenario = loadScenario('controls');
+      scenario.groups[1].groupIdFrom = 'RINCON_SIM000000000001402'; // Living Room group created by Hallway
+      sim.setScenario(scenario);
+      await helper._refresh();
+      assert.match(zone('Living Room').id, /^RINCON_SIM000000000001402:/);
+      await helper._refreshFavorites();
+      const playlist = helper.favorites.find((f) => f.title === "Today's Top Hits");
+      await helper._handlePlayFavorite(zone('Living Room').id, playlist.id);
+      await settle();
+      assert.equal(lastResult().success, true, `favorite failed: ${lastResult().error}`);
+      assert.equal(zone('Living Room').title, 'Die With A Smile');
+    });
+
+    // Reported on a real system: the first speaker found could not list favorites.
+    it('loads favorites from another speaker when the first one cannot list them', async () => {
+      sim.scenario.speakers.find((sp) => sp.port === 1400).noFavorites = true;
+      const fresh = loadNodeHelper({ ...baseConfig, enableControls: true });
+      await fresh._refresh();
+      await fresh._favoritesPromise;
+      assert.equal(fresh.favorites.length, 4);
+    });
+
+    it('does not retry a failing favorites fetch on every refresh', async () => {
+      for (const sp of sim.scenario.speakers) {
+        sp.noFavorites = true;
+      }
+      const fresh = loadNodeHelper({ ...baseConfig, enableControls: true });
+      await fresh._refresh();
+      await fresh._favoritesPromise;
+      sim.requests = [];
+      fresh.lastPayloadAt = null;
+      await fresh._refresh();
+      await fresh._favoritesPromise;
+      assert.equal(sim.requests.filter((r) => r.action === 'Browse').length, 0);
     });
 
     it('reports an error for an unknown zone without contacting any speaker', async () => {

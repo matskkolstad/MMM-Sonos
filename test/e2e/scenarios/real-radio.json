@@ -1,9 +1,21 @@
 {
-  "description": "Radio as reported by a real Sonos system (debug log from the maintainer's mirror, 2026-09-24): NRK P3 via the NRK Radio service and P4 via myTuner Radio, plus the same P4 stream from a radio app that reports no station name.",
+  "description": "Radio as reported by a real Sonos system (debug log from the maintainer's mirror, 2026-09-24): NRK P3 via the NRK Radio service and P4 via myTuner Radio, plus the same P4 stream from a radio app that reports no station name. Favorites are exactly as the maintainer's system lists them (Browse FV:2, 2026-09-24).",
   "speakers": [
-    { "uuid": "RINCON_SIM000000000001400", "name": "Bad", "port": 1400 },
-    { "uuid": "RINCON_SIM000000000001401", "name": "Kjøkken", "port": 1401 },
-    { "uuid": "RINCON_SIM000000000001402", "name": "Stue", "port": 1402 }
+    {
+      "uuid": "RINCON_SIM000000000001400",
+      "name": "Bad",
+      "port": 1400
+    },
+    {
+      "uuid": "RINCON_SIM000000000001401",
+      "name": "Kjøkken",
+      "port": 1401
+    },
+    {
+      "uuid": "RINCON_SIM000000000001402",
+      "name": "Stue",
+      "port": 1402
+    }
   ],
   "groups": [
     {
@@ -48,6 +60,56 @@
         "class": "object.item",
         "duration": 0
       }
+    }
+  ],
+  "favorites": [
+    {
+      "title": "NRK P3",
+      "uri": "x-sonosapi-stream:live%3Ap3?sid=277&flags=8292&sn=3",
+      "itemId": "10092064live%3Ap3",
+      "art": "orange"
+    },
+    {
+      "title": "Oppdag Sonos Radio",
+      "uri": "",
+      "itemId": "10fe3064%2Fstations%2Fnb-NO%2FIE%2Fc2Q6SUU6ZGlzY292ZXItc29ub3MtcmFkaW8",
+      "container": true
+    },
+    {
+      "title": "P4 Lyden av Norge",
+      "uri": "x-sonosapi-stream:r%3A402245?sid=268&flags=8292&sn=4",
+      "itemId": "10092064r%3A402245",
+      "art": "red"
+    },
+    {
+      "title": "Populært nå",
+      "uri": "",
+      "itemId": "10fe3064%2Fstations%2Fnb-NO%2FIE%2Fc2Q6SUU6dHJlbmRpbmctbm93",
+      "container": true
+    },
+    {
+      "title": "Sonos presenterer",
+      "uri": "",
+      "itemId": "10fe3064%2Fstations%2Fnb-NO%2FIE%2Fc2Q6SUU6c29ub3MtcHJlc2VudHM",
+      "container": true
+    },
+    {
+      "title": "Your Top Songs 2021",
+      "uri": "x-rincon-cpcontainer:1006206cspotify%3Aplaylist%3A37i9dQZF1EUMDoJuT8yJsl?sid=12&flags=8300&sn=2",
+      "itemId": "1006206cspotify%3Aplaylist%3A37i9dQZF1EUMDoJuT8yJsl",
+      "container": true,
+      "art": "purple",
+      "tracks": [
+        {
+          "uri": "x-sonos-spotify:spotify%3atrack%3a4uLU6hMCjMI75M1A2tKUQC?sid=12&flags=8224&sn=2",
+          "title": "Levitating",
+          "artist": "Dua Lipa",
+          "album": "Future Nostalgia",
+          "art": "purple",
+          "duration": 203,
+          "position": 0
+        }
+      ]
     }
   ]
 }
