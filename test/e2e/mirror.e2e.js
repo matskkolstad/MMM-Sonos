@@ -52,8 +52,9 @@ const common = {
 // receives, and albumArtColors must be enabled there for accent colours.
 const INSTANCES = [
   { name: 'row', position: 'top_bar', config: { displayMode: 'row', showAlbum: true } },
-  { name: 'grid', position: 'bottom_left', config: { displayMode: 'grid', columns: 2, showAlbum: true } },
-  { name: 'mini', position: 'bottom_right', config: { displayMode: 'mini' } },
+  // grid and mini keep animations on, so live updates also exercise animated re-renders.
+  { name: 'grid', position: 'bottom_left', config: { displayMode: 'grid', columns: 2, showAlbum: true, transitionAnimation: 'fade' } },
+  { name: 'mini', position: 'bottom_right', config: { displayMode: 'mini', transitionAnimation: 'slide-up' } },
   {
     name: 'fullscreen',
     position: 'middle_center',
@@ -218,7 +219,7 @@ describe('MagicMirror² end-to-end', { timeout: 180000 }, () => {
 
     const { chromium } = require(path.join(WORKSPACE, 'node_modules', 'playwright-core'));
     browser = await chromium.launch({ executablePath: findChromium() });
-    page = await browser.newPage({ viewport: { width: 1920, height: 1600 } });
+    page = await browser.newPage({ viewport: { width: 1920, height: 2000 } });
     page.on('pageerror', (error) => pageErrors.push(error.message));
     await page.goto(BASE_URL);
   });
@@ -314,10 +315,16 @@ describe('MagicMirror² end-to-end', { timeout: 180000 }, () => {
     before(async () => {
       sim.setScenario(loadScenario('more-services'));
       // No reload: the module must pick up the change on its own polling interval.
+      const showsNewKitchenTrack = (instance) => {
+        const card = cardFor(instance || { cards: [] }, UUID.kitchen);
+        return !!card && (card.title || '').startsWith('Espresso') || card?.album === "Short n' Sweet";
+      };
       state = await waitForRender(
-        (s) => cardFor(s.row || { cards: [] }, UUID.kitchen)?.title === 'Espresso' || cardFor(s.row || { cards: [] }, UUID.kitchen)?.album === "Short n' Sweet",
-        'the row instance to show the new Kitchen track'
+        (s) => showsNewKitchenTrack(s.row) && showsNewKitchenTrack(s.grid) && showsNewKitchenTrack(s.mini),
+        'row, grid and mini to show the new Kitchen track'
       );
+      // Let running animations finish before the final read.
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       await page.waitForFunction(() => [...document.querySelectorAll('.mmm-sonos img')].every((img) => img.complete));
       state = await waitForRender(() => true, 'final state');
       await screenshot('more-services');
@@ -343,6 +350,18 @@ describe('MagicMirror² end-to-end', { timeout: 180000 }, () => {
 
     it('hides the paused group when showWhenPaused is false', () => {
       assert.equal(cardFor(state.row, UUID.office), undefined);
+    });
+
+    it('animated instances (grid, mini) show the same final state as the row instance', () => {
+      for (const name of ['grid', 'mini']) {
+        assert.deepEqual(
+          state[name].cards.map((card) => card.id).sort(),
+          state.row.cards.map((card) => card.id).sort(),
+          `${name} shows other groups than row`
+        );
+        assert.equal(cardFor(state[name], UUID.office), undefined, `${name} still shows the paused group`);
+      }
+      assert.equal(cardFor(state.grid, UUID.kitchen).title, 'Espresso');
     });
 
     it('renders without page errors', () => {

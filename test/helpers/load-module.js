@@ -86,7 +86,12 @@ function loadFrontendModule(config = {}) {
           frontendDefinition = definition;
         }
       },
-      console
+      console,
+      // Resolved at call time so node:test's mock.timers can control them.
+      setTimeout: (...args) => globalThis.setTimeout(...args),
+      clearTimeout: (...args) => globalThis.clearTimeout(...args),
+      setInterval: (...args) => globalThis.setInterval(...args),
+      clearInterval: (...args) => globalThis.clearInterval(...args)
     };
     vm.runInNewContext(source, sandbox, { filename: FRONTEND_PATH });
     if (!frontendDefinition) {

@@ -75,6 +75,9 @@ Module.register('MMM-Sonos', {
     this.progressAnimationTimer = null;
     this._animTransitionTimer = null;
     this._fullUpdateDebounceTimer = null;
+    this._fullUpdateDoneTimer = null;
+    this._fullUpdateInProgress = false;
+    this._rerenderAfterFullUpdate = false;
 
   this._log('Starting MMM-Sonos module');
     // instanceId lets node_helper keep each instance's settings apart (it is shared).
@@ -99,6 +102,10 @@ Module.register('MMM-Sonos', {
     if (this._fullUpdateDebounceTimer) {
       clearTimeout(this._fullUpdateDebounceTimer);
       this._fullUpdateDebounceTimer = null;
+    }
+    if (this._fullUpdateDoneTimer) {
+      clearTimeout(this._fullUpdateDoneTimer);
+      this._fullUpdateDoneTimer = null;
     }
   },
 
@@ -127,6 +134,22 @@ Module.register('MMM-Sonos', {
         this.groups = newGroups;
         this.lastUpdated = newTimestamp;
         this.error = null;
+
+        if (this._fullUpdateDebounceTimer) {
+          // A full re-render is already scheduled; it renders the latest this.groups.
+          // Per-card updates now would only touch DOM that is about to be replaced.
+          this._log('Full update pending — data stored for it');
+          break;
+        }
+
+        if (this._fullUpdateInProgress) {
+          // MagicMirror is swapping in content built from older data. Render again once
+          // it is done so this update is not lost.
+          if (needsFull || changedIds.size > 0 || volumeChangedIds.size > 0) {
+            this._rerenderAfterFullUpdate = true;
+          }
+          break;
+        }
 
         if (needsFull) {
           this._log('Structural change — full DOM update');
@@ -1215,6 +1238,11 @@ Module.register('MMM-Sonos', {
         }
         if (!newEl) { el.remove(); return; }
 
+        // A full re-render may have replaced the card in the meantime.
+        if (el.parentNode !== parent) {
+          return;
+        }
+
         if (animInClass) {
           newEl.style.setProperty('--mmm-sonos-card-anim-duration', `${halfDuration}ms`);
           newEl.classList.add(animInClass);
@@ -1241,9 +1269,12 @@ Module.register('MMM-Sonos', {
   _animatedUpdateDom() {
     const debounceMs = 300;
 
+    // Keep an already scheduled update instead of restarting the timer: it renders
+    // this.groups as it is when it fires, so later data is included anyway, and
+    // restarting on every notification could postpone the update indefinitely while
+    // data keeps arriving.
     if (this._fullUpdateDebounceTimer) {
-      clearTimeout(this._fullUpdateDebounceTimer);
-      this._fullUpdateDebounceTimer = null;
+      return;
     }
 
     this._fullUpdateDebounceTimer = setTimeout(() => {
@@ -1254,11 +1285,27 @@ Module.register('MMM-Sonos', {
 
   _executeAnimatedUpdateDom() {
     const animation = (this.config.transitionAnimation || 'fade').toLowerCase();
+    const duration = animation === 'none' ? 0 : Math.max(200, Number(this.config.transitionDuration) || 400);
+
+    // MagicMirror builds the new content right away and swaps it in after the
+    // animation, so track the update until then (updateDom() returns no promise).
+    this._fullUpdateInProgress = true;
+    if (this._fullUpdateDoneTimer) {
+      clearTimeout(this._fullUpdateDoneTimer);
+    }
+    this._fullUpdateDoneTimer = setTimeout(() => {
+      this._fullUpdateDoneTimer = null;
+      this._fullUpdateInProgress = false;
+      if (this._rerenderAfterFullUpdate) {
+        this._rerenderAfterFullUpdate = false;
+        this._animatedUpdateDom();
+      }
+    }, duration + 100);
+
     if (animation === 'none') {
       this.updateDom(0);
       return;
     }
-    const duration = Math.max(200, Number(this.config.transitionDuration) || 400);
     const animMap = {
       'fade':        { out: 'fadeOut',      in: 'fadeIn' },
       'slide-up':    { out: 'fadeOutUp',    in: 'fadeInUp' },

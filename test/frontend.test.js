@@ -9,7 +9,7 @@
  * end-to-end test instead.
  */
 
-const { describe, it } = require('node:test');
+const { describe, it, mock, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { loadFrontendModule } = require('./helpers/load-module');
@@ -325,5 +325,89 @@ describe('_formatTime()', () => {
 
   it('formats hours as h:mm:ss', () => {
     assert.equal(mod._formatTime(3725), '1:02:05');
+  });
+});
+
+describe('SONOS_DATA handling while a full re-render is pending or running', () => {
+  // A module instance whose DOM-touching methods are replaced by recorders.
+  const makeModule = (config = {}) => {
+    const mod = loadFrontendModule({ transitionAnimation: 'fade', transitionDuration: 400, ...config });
+    mod.calls = [];
+    mod.updateDom = (options) => mod.calls.push(['updateDom', options]);
+    mod._animateGroupCards = (ids) => mod.calls.push(['animateGroupCards', [...ids]]);
+    mod._updateProgressDataFromServer = () => mod.calls.push(['progress']);
+    mod._updateVolumeInPlace = () => mod.calls.push(['volume']);
+    return mod;
+  };
+  const send = (mod, groups) => mod.socketNotificationReceived('SONOS_DATA', { groups, timestamp: Date.now() });
+  const count = (mod, name) => mod.calls.filter(([n]) => n === name).length;
+
+  afterEach(() => {
+    mock.timers.reset();
+  });
+
+  it('renders 300 ms after the first request, even if more requests keep arriving', () => {
+    mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+    const mod = makeModule();
+
+    mod._animatedUpdateDom();
+    mock.timers.tick(200);
+    mod._animatedUpdateDom(); // must not postpone the scheduled update
+    mock.timers.tick(100);
+
+    assert.equal(count(mod, 'updateDom'), 1);
+  });
+
+  it('does not run per-card updates while a full update is scheduled', () => {
+    mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+    const mod = makeModule();
+    mod.groups = [makeGroup(), makeGroup({ id: 'group-2', name: 'Kitchen' })];
+
+    send(mod, [makeGroup()]);
+    send(mod, [makeGroup({ title: 'Changed' })]);
+
+    assert.equal(count(mod, 'animateGroupCards'), 0);
+    assert.equal(mod.groups[0].title, 'Changed', 'latest data is kept for the pending render');
+  });
+
+  it('renders again after an animated update when data changed during it', () => {
+    mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+    const mod = makeModule();
+    mod.groups = [makeGroup(), makeGroup({ id: 'group-2', name: 'Kitchen' })];
+
+    send(mod, [makeGroup()]);
+    mock.timers.tick(300); // full update starts (fade, 400 ms)
+    assert.equal(count(mod, 'updateDom'), 1);
+
+    send(mod, [makeGroup({ title: 'Changed during animation' })]);
+    assert.equal(count(mod, 'animateGroupCards'), 0);
+
+    mock.timers.tick(500); // animation done → follow-up scheduled
+    mock.timers.tick(300);
+    assert.equal(count(mod, 'updateDom'), 2);
+  });
+
+  it('does not render again when nothing changed during the update', () => {
+    mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+    const mod = makeModule();
+    mod.groups = [makeGroup(), makeGroup({ id: 'group-2', name: 'Kitchen' })];
+
+    send(mod, [makeGroup()]);
+    mock.timers.tick(300);
+    send(mod, [makeGroup()]);
+    mock.timers.tick(1000);
+
+    assert.equal(count(mod, 'updateDom'), 1);
+  });
+
+  it('uses per-card animation for a track change when no full update is pending', () => {
+    mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+    const mod = makeModule();
+    mod.groups = [makeGroup()];
+
+    send(mod, [makeGroup({ title: 'Next song' })]);
+
+    assert.deepEqual(mod.calls.find(([n]) => n === 'animateGroupCards'), ['animateGroupCards', ['group-1']]);
+    assert.equal(count(mod, 'updateDom'), 0);
   });
 });
