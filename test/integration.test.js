@@ -122,6 +122,61 @@ describe('node_helper against the Sonos simulator', () => {
     });
   });
 
+  describe('load on the speakers', () => {
+    const countBy = (requests) => requests.reduce((acc, r) => ({ ...acc, [r.action]: (acc[r.action] || 0) + 1 }), {});
+
+    async function connectedHelper() {
+      sim.setScenario(loadScenario('mixed-sources'));
+      const helper = loadNodeHelper({ ...baseConfig, updateInterval: 5000 });
+      helper.coordinator = await helper._discoverViaKnownDevices();
+      sim.requests = [];
+      return helper;
+    }
+
+    it('asks each playing group for its position only once per refresh (radio: twice)', async () => {
+      const helper = await connectedHelper();
+      await helper._refresh();
+      // 5 zones (1 idle) → currentTrack() for each, plus the radio group's own metadata read.
+      assert.equal(countBy(sim.requests).GetPositionInfo, 6);
+    });
+
+    it('runs one refresh for requests that arrive while a refresh is running', async () => {
+      const helper = await connectedHelper();
+      await Promise.all([helper._refresh(), helper._refresh(), helper._refresh(), helper._refresh()]);
+      assert.equal(countBy(sim.requests).GetZoneGroupState, 1);
+    });
+
+    it('answers SONOS_REQUEST from recent data without polling the speakers again', async () => {
+      const helper = await connectedHelper();
+      await helper._refresh();
+      const soapCalls = sim.requests.length;
+      const sent = helper.notifications.length;
+
+      for (let i = 0; i < 4; i++) {
+        helper.socketNotificationReceived('SONOS_REQUEST');
+      }
+      await helper._refreshPromise;
+
+      assert.equal(sim.requests.length, soapCalls, 'no extra SOAP calls');
+      const replies = helper.notifications.slice(sent);
+      assert.equal(replies.length, 4);
+      assert.deepEqual(replies[0].payload.groups, helper.lastPayload);
+      assert.equal(replies[0].payload.timestamp, helper.lastPayloadAt, 'original timestamp keeps progress correct');
+    });
+
+    it('polls again on SONOS_REQUEST once the data is older than updateInterval', async () => {
+      const helper = await connectedHelper();
+      await helper._refresh();
+      helper.lastPayloadAt -= 6000;
+      sim.requests = [];
+
+      helper.socketNotificationReceived('SONOS_REQUEST');
+      await helper._refreshPromise;
+
+      assert.equal(countBy(sim.requests).GetZoneGroupState, 1);
+    });
+  });
+
   describe('maxGroups', () => {
     it('is not applied by node_helper (each frontend instance applies it after its own filters)', async () => {
       sim.setScenario(loadScenario('mixed-sources'));

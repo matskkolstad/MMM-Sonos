@@ -268,6 +268,15 @@ describe('MagicMirror² end-to-end', { timeout: 180000 }, () => {
       assert.equal(card.album, 'After Hours');
     });
 
+    it('shows playback progress for a track with a known duration', () => {
+      const card = cardFor(state.row, UUID.livingRoom);
+      assert.match(card.text, /\b1:3\d \/ 3:42\b/); // started at 1:35 of 3:42 in the simulator
+    });
+
+    it('shows no progress bar for radio', () => {
+      assert.doesNotMatch(cardFor(state.row, UUID.bedroom).text, /\d:\d\d \/ \d/);
+    });
+
     it('shows station name and now-playing text for radio', () => {
       const card = cardFor(state.row, UUID.bedroom);
       assert.equal(card.title, 'NRK P3');

@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Applied non-breaking `npm audit` fixes to the lockfile (axios 1.13.1 → 1.20.0, follow-redirects, form-data, brace-expansion).
 
 ### Changed
+- **Far fewer requests to the Sonos system** — each module instance requested data on its own timer in addition to `node_helper`'s own timer, and every request polled all speakers again. With four instances that was about 105 SOAP calls every 5 seconds for a 5-room setup; it is now 17. Requests are answered from data younger than `updateInterval`, overlapping refreshes are merged into one, and the position/duration already returned with the current track is reused instead of being fetched a second time per group.
 - **`wrapText: true` + `maxTextLines` now works correctly in row mode** — cards in row mode now use a fixed width equal to `cardMinWidth` (instead of growing freely to fit content). This means long titles wrap to `maxTextLines` lines as intended, rather than extending the card horizontally.
 - **`showPlaybackState` badge is now shown on the same line as the speaker name** — previously the state ("Playing", "Paused") appeared below the name in a separate row; it is now displayed inline to the right of the name.
 - **Track changes only animate the affected card** — transitions between playing-like states (PLAYING ↔ TRANSITIONING ↔ BUFFERING) during a track change no longer trigger a full module re-render. Only the card whose track actually changed animates.

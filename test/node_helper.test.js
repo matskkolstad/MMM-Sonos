@@ -51,38 +51,6 @@ describe('_pick()', () => {
   });
 });
 
-describe('_parseTimeToSeconds()', () => {
-  const helper = loadNodeHelper();
-
-  it('parses standard time string correctly', () => {
-    assert.equal(helper._parseTimeToSeconds('1:23:45'), 5025);
-  });
-
-  it('parses zero hours correctly', () => {
-    assert.equal(helper._parseTimeToSeconds('0:02:30'), 150);
-  });
-
-  it('returns null for NOT_IMPLEMENTED', () => {
-    assert.equal(helper._parseTimeToSeconds('NOT_IMPLEMENTED'), null);
-  });
-
-  it('returns 0 for 0:00:00 (track at start — position is 0, not unknown)', () => {
-    assert.equal(helper._parseTimeToSeconds('0:00:00'), 0);
-  });
-
-  it('returns null for non-string input', () => {
-    assert.equal(helper._parseTimeToSeconds(null), null);
-    assert.equal(helper._parseTimeToSeconds(undefined), null);
-    assert.equal(helper._parseTimeToSeconds(123), null);
-  });
-
-  it('returns null for malformed string', () => {
-    assert.equal(helper._parseTimeToSeconds('bad:input'), null);
-    assert.equal(helper._parseTimeToSeconds(''), null);
-    assert.equal(helper._parseTimeToSeconds('1:2'), null);
-  });
-});
-
 describe('_normalizeArt()', () => {
   const helper = loadNodeHelper();
 

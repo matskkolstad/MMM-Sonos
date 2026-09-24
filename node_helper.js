@@ -39,6 +39,8 @@ module.exports = NodeHelper.create({
     this.updateTimer = null;
     this.isDiscovering = false;
     this.lastPayload = [];
+    this.lastPayloadAt = null;
+    this._refreshPromise = null;
     this.albumArtCache = new Map(); // in-memory cache: url-hash → local filename
     this.accentColorCache = new Map(); // in-memory cache: filename → { r, g, b } | null
 
@@ -60,7 +62,7 @@ module.exports = NodeHelper.create({
         this._configure(this._mergeInstanceConfig(payload || {}));
         break;
       case 'SONOS_REQUEST':
-        this._refresh();
+        this._handleDataRequest();
         break;
       case 'SONOS_CLEAR_CACHE':
         this._clearAlbumArtCache();
@@ -253,7 +255,30 @@ module.exports = NodeHelper.create({
     }
   },
 
-  async _refresh() {
+  // Every module instance asks for data on its own timer, while node_helper also
+  // refreshes on its own timer and broadcasts the result to all instances. Answer a
+  // request with the latest data while it is still fresh instead of polling the
+  // speakers again for every instance.
+  _handleDataRequest() {
+    const maxAge = Math.max(this.config.updateInterval || 0, 5000);
+    if (this.lastPayloadAt && Date.now() - this.lastPayloadAt < maxAge) {
+      this.sendSocketNotification('SONOS_DATA', { groups: this.lastPayload, timestamp: this.lastPayloadAt });
+      return;
+    }
+    this._refresh();
+  },
+
+  // Only one refresh runs at a time; callers that arrive meanwhile share its result.
+  _refresh() {
+    if (!this._refreshPromise) {
+      this._refreshPromise = this._doRefresh().finally(() => {
+        this._refreshPromise = null;
+      });
+    }
+    return this._refreshPromise;
+  },
+
+  async _doRefresh() {
     if (!this.coordinator) {
       await this._discover();
       if (!this.coordinator) {
@@ -274,9 +299,10 @@ module.exports = NodeHelper.create({
       }
 
       this.lastPayload = formatted;
+      this.lastPayloadAt = Date.now();
       this.sendSocketNotification('SONOS_DATA', {
         groups: formatted,
-        timestamp: Date.now()
+        timestamp: this.lastPayloadAt
       });
     } catch (error) {
       this.sendError('Failed to fetch Sonos data', error);
@@ -478,14 +504,12 @@ module.exports = NodeHelper.create({
           this.sendDebug('Failed to fetch volume', name || id, error?.message || error);
         }
 
-        try {
-          const positionInfo = await coordinator.avTransportService().GetPositionInfo();
-          if (positionInfo && !isTvSource) {
-            position = this._parseTimeToSeconds(positionInfo.RelTime);
-            duration = this._parseTimeToSeconds(positionInfo.TrackDuration);
-          }
-        } catch (error) {
-          this.sendDebug('Failed to fetch position info', name || id, error?.message || error);
+        // currentTrack() already read GetPositionInfo, so reuse its position/duration
+        // instead of asking the speaker again. Values Sonos reports as NOT_IMPLEMENTED
+        // (e.g. for some streams) arrive as NaN and are treated as unknown.
+        if (!isTvSource) {
+          position = Number.isFinite(track?.position) ? track.position : null;
+          duration = Number.isFinite(track?.duration) ? track.duration : null;
         }
 
         // Extract dominant accent color from locally cached album art when enabled
@@ -703,32 +727,6 @@ module.exports = NodeHelper.create({
     }
 
     return false;
-  },
-
-  _parseTimeToSeconds(timeString) {
-    if (!timeString || typeof timeString !== 'string') {
-      return null;
-    }
-
-    // NOT_IMPLEMENTED means the device does not support position tracking (e.g. radio)
-    if (timeString === 'NOT_IMPLEMENTED') {
-      return null;
-    }
-
-    const parts = timeString.split(':');
-    if (parts.length !== 3) {
-      return null;
-    }
-
-    const hours = parseInt(parts[0], 10);
-    const minutes = parseInt(parts[1], 10);
-    const seconds = parseInt(parts[2], 10);
-
-    if (isNaN(hours) || isNaN(minutes) || isNaN(seconds)) {
-      return null;
-    }
-
-    return hours * 3600 + minutes * 60 + seconds;
   },
 
   _pick(source, keys) {
