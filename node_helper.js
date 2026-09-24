@@ -11,7 +11,26 @@ const http = require('node:http');
 const { Vibrant } = require('node-vibrant/node');
 
 const MAX_REDIRECTS = 5;
+const DOWNLOAD_TIMEOUT_MS = 10 * 1000;
 const DEFAULT_CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
+
+// Track URI prefixes Sonos uses for live radio streams.
+const RADIO_URI_PREFIXES = [
+  'x-sonosapi-stream:',
+  'x-sonosapi-radio:',
+  'x-sonosapi-hls:',
+  'x-sonosapi-rtd:',
+  'x-rincon-mp3radio:',
+  'aac:',
+  'hls-radio:'
+];
+
+// Sonos music service IDs (the `sid` parameter in track URIs) for sources the
+// frontend has a label for.
+const MUSIC_SERVICE_IDS = {
+  12: 'spotify',
+  204: 'apple_music'
+};
 
 module.exports = NodeHelper.create({
   start() {
@@ -21,12 +40,14 @@ module.exports = NodeHelper.create({
     this.updateTimer = null;
     this.isDiscovering = false;
     this.lastPayload = [];
+    this.lastPayloadAt = null;
+    this._refreshPromise = null;
     this.albumArtCache = new Map(); // in-memory cache: url-hash → local filename
     this.accentColorCache = new Map(); // in-memory cache: filename → { r, g, b } | null
 
     const fallbackConfig = this._readConfigFromFile();
     if (fallbackConfig) {
-      this._configure(fallbackConfig).catch((error) => {
+      this._configure(this._mergeInstanceConfig(fallbackConfig)).catch((error) => {
         this.sendError('Failed to start MMM-Sonos with fallback config', error);
       });
     }
@@ -39,10 +60,10 @@ module.exports = NodeHelper.create({
   socketNotificationReceived(notification, payload) {
     switch (notification) {
       case 'SONOS_CONFIG':
-        this._configure(payload || {});
+        this._configure(this._mergeInstanceConfig(payload || {}));
         break;
       case 'SONOS_REQUEST':
-        this._refresh();
+        this._handleDataRequest();
         break;
       case 'SONOS_CLEAR_CACHE':
         this._clearAlbumArtCache();
@@ -51,8 +72,43 @@ module.exports = NodeHelper.create({
     }
   },
 
+  // node_helper is shared by every MMM-Sonos instance on the mirror, but each instance
+  // sends its own config. Remember them all and combine the options that decide what
+  // node_helper fetches, so one instance's settings do not switch features off for another.
+  // Each instance still applies its own filters (allowed/hidden speakers, paused groups)
+  // in the browser.
+  _mergeInstanceConfig(config) {
+    if (!this.instanceConfigs) {
+      this.instanceConfigs = new Map();
+    }
+    const { instanceId, ...instanceConfig } = config;
+    if (instanceId) {
+      // The config.js fallback read at startup is superseded once real instances connect.
+      this.instanceConfigs.delete('config.js');
+    }
+    this.instanceConfigs.set(instanceId || 'config.js', instanceConfig);
+    return this._combineConfigs([...this.instanceConfigs.values()]);
+  },
+
+  _combineConfigs(configs) {
+    const latest = configs[configs.length - 1] || {};
+    const anyEnabled = (key) => configs.some((c) => !!c[key]);
+    // Hide a speaker/group in node_helper only when every instance hides it.
+    const hiddenByAll = (key) => {
+      const lists = configs.map((c) => (Array.isArray(c[key]) ? c[key].map((v) => String(v).toLowerCase()) : []));
+      return lists.length ? lists.reduce((acc, list) => acc.filter((v) => list.includes(v))) : [];
+    };
+    return {
+      ...latest,
+      showWhenPaused: anyEnabled('showWhenPaused'),
+      albumArtColors: anyEnabled('albumArtColors'),
+      debug: anyEnabled('debug'),
+      hiddenSpeakers: hiddenByAll('hiddenSpeakers'),
+      hiddenGroups: hiddenByAll('hiddenGroups')
+    };
+  },
+
   async _configure(config) {
-  Log.log(`[MMM-Sonos] Received config: ${JSON.stringify(config)}`);
     this.config = Object.assign(
       {
         updateInterval: 15 * 1000,
@@ -130,7 +186,7 @@ module.exports = NodeHelper.create({
     }
 
     this.isDiscovering = true;
-  this.sendDebug('Starting Sonos discovery');
+    this.sendDebug('Starting Sonos discovery');
 
     try {
       if (this.config.discoveryTimeout !== 0) {
@@ -199,7 +255,30 @@ module.exports = NodeHelper.create({
     }
   },
 
-  async _refresh() {
+  // Every module instance asks for data on its own timer, while node_helper also
+  // refreshes on its own timer and broadcasts the result to all instances. Answer a
+  // request with the latest data while it is still fresh instead of polling the
+  // speakers again for every instance.
+  _handleDataRequest() {
+    const maxAge = Math.max(this.config.updateInterval || 0, 5000);
+    if (this.lastPayloadAt && Date.now() - this.lastPayloadAt < maxAge) {
+      this.sendSocketNotification('SONOS_DATA', { groups: this.lastPayload, timestamp: this.lastPayloadAt });
+      return;
+    }
+    this._refresh();
+  },
+
+  // Only one refresh runs at a time; callers that arrive meanwhile share its result.
+  _refresh() {
+    if (!this._refreshPromise) {
+      this._refreshPromise = this._doRefresh().finally(() => {
+        this._refreshPromise = null;
+      });
+    }
+    return this._refreshPromise;
+  },
+
+  async _doRefresh() {
     if (!this.coordinator) {
       await this._discover();
       if (!this.coordinator) {
@@ -220,13 +299,15 @@ module.exports = NodeHelper.create({
       }
 
       this.lastPayload = formatted;
+      this.lastPayloadAt = Date.now();
       this.sendSocketNotification('SONOS_DATA', {
         groups: formatted,
-        timestamp: Date.now()
+        timestamp: this.lastPayloadAt
       });
     } catch (error) {
       this.sendError('Failed to fetch Sonos data', error);
-      this.coordinator = null; // Tving re-discovery
+      this.coordinator = null; // Force re-discovery on the next refresh
+      this.lastPayloadAt = null; // Answer the next request with a fresh poll, not old data
     }
   },
 
@@ -387,7 +468,10 @@ module.exports = NodeHelper.create({
             /^x-sonosapi/i.test(rawTitle) ||
             /^aac:/i.test(rawTitle) ||
             /^hls-radio:/i.test(rawTitle) ||
-            /^x-rincon/i.test(rawTitle);
+            /^x-rincon/i.test(rawTitle) ||
+            // Some stations report the end of the stream URL as title, e.g.
+            // "P04_MM?args=3rdparty_03" for x-rincon-mp3radio://…/P04_MM?args=3rdparty_03
+            (!!track?.uri && track.uri.endsWith(`/${rawTitle}`));
           // Priority: stationName (from DIDL) > usable rawTitle > streamTitle > 'Radio'
           displayTitle = stationName || (titleIsUseless ? (streamTitle || 'Radio') : rawTitle);
           // streamTitle / streamContent (e.g. "Sigrid – Burning Bridges") as artist line
@@ -424,14 +508,12 @@ module.exports = NodeHelper.create({
           this.sendDebug('Failed to fetch volume', name || id, error?.message || error);
         }
 
-        try {
-          const positionInfo = await coordinator.avTransportService().GetPositionInfo();
-          if (positionInfo && !isTvSource) {
-            position = this._parseTimeToSeconds(positionInfo.RelTime);
-            duration = this._parseTimeToSeconds(positionInfo.TrackDuration);
-          }
-        } catch (error) {
-          this.sendDebug('Failed to fetch position info', name || id, error?.message || error);
+        // currentTrack() already read GetPositionInfo, so reuse its position/duration
+        // instead of asking the speaker again. Values Sonos reports as NOT_IMPLEMENTED
+        // (e.g. for some streams) arrive as NaN and are treated as unknown.
+        if (!isTvSource) {
+          position = Number.isFinite(track?.position) ? track.position : null;
+          duration = Number.isFinite(track?.duration) ? track.duration : null;
         }
 
         // Extract dominant accent color from locally cached album art when enabled
@@ -442,7 +524,8 @@ module.exports = NodeHelper.create({
           accentColor = await this._extractAccentColor(artFilePath);
         }
 
-        const coordinatorName = await this._inferCoordinatorName(coordinator);
+        // Only ask the speaker for its room name when the group data lacks one.
+        const coordinatorName = (!name || !members.length) ? await this._inferCoordinatorName(coordinator) : null;
         formatted.push({
           id: id || coordinator.uuid || coordinator.host,
           name: name || coordinatorName || 'Sonos',
@@ -466,8 +549,9 @@ module.exports = NodeHelper.create({
         this.sendDebug('Failed to fetch data for group', name || id, error?.message || error);
       }
     }
-  const ordered = formatted.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    return ordered.slice(0, this.config.maxGroups || ordered.length);
+    // maxGroups is applied by each frontend instance after its own allowed/hidden
+    // filters; limiting here could drop the only group an instance is allowed to show.
+    return formatted.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   },
 
   _resolveCoordinator(group) {
@@ -504,7 +588,7 @@ module.exports = NodeHelper.create({
       return null;
     }
     try {
-      const description = coordinator.deviceDescription || (await coordinator.deviceDescription());
+      const description = await coordinator.deviceDescription();
       return description?.roomName || description?.displayName || coordinator.name || coordinator.host;
     } catch (error) {
       this.sendDebug('Unable to fetch coordinator name', error?.message || error);
@@ -572,20 +656,21 @@ module.exports = NodeHelper.create({
     // Check URI patterns first — more reliable than track.type which may be generic (e.g. 'track')
     const uri = (track.uri || '').toLowerCase();
     if (uri) {
+      // Only prefixes Sonos uses for live streams count as radio. In particular
+      // x-sonosapi-hls-static: is NOT radio: Apple Music and Amazon Music use it for
+      // ordinary on-demand tracks, and treating those as radio replaced the track
+      // title with the album name (issue #53).
       if (
-        uri.startsWith('x-sonosapi-stream:') ||
-        uri.startsWith('x-sonosapi-hls-static:') ||
-        uri.startsWith('x-sonosapi-hls:') ||
-        uri.startsWith('x-sonosapi-rtd:') ||
-        uri.startsWith('x-rincon-mp3radio:') ||
-        uri.startsWith('aac:') ||
-        uri.startsWith('hls-radio:') ||
-        uri.includes('x-sonosapi') ||
+        RADIO_URI_PREFIXES.some((prefix) => uri.startsWith(prefix)) ||
         uri.includes('tunein') ||
-        uri.includes('radiotime') ||
-        uri.includes('/radio')
+        uri.includes('radiotime')
       ) {
         return 'radio';
+      }
+
+      const serviceId = uri.match(/[?&]sid=(\d+)/)?.[1];
+      if (serviceId && MUSIC_SERVICE_IDS[serviceId]) {
+        return MUSIC_SERVICE_IDS[serviceId];
       }
 
       if (uri.includes('spotify')) {
@@ -647,32 +732,6 @@ module.exports = NodeHelper.create({
     }
 
     return false;
-  },
-
-  _parseTimeToSeconds(timeString) {
-    if (!timeString || typeof timeString !== 'string') {
-      return null;
-    }
-
-    // NOT_IMPLEMENTED means the device does not support position tracking (e.g. radio)
-    if (timeString === 'NOT_IMPLEMENTED') {
-      return null;
-    }
-
-    const parts = timeString.split(':');
-    if (parts.length !== 3) {
-      return null;
-    }
-
-    const hours = parseInt(parts[0], 10);
-    const minutes = parseInt(parts[1], 10);
-    const seconds = parseInt(parts[2], 10);
-
-    if (isNaN(hours) || isNaN(minutes) || isNaN(seconds)) {
-      return null;
-    }
-
-    return hours * 3600 + minutes * 60 + seconds;
   },
 
   _pick(source, keys) {
@@ -749,57 +808,65 @@ module.exports = NodeHelper.create({
     }
   },
 
-  _downloadFile(url, destPath) {
+  _downloadFile(url, destPath, timeoutMs = DOWNLOAD_TIMEOUT_MS) {
     return new Promise((resolve, reject) => {
       const tmpPath = `${destPath}.tmp`;
       const file = fs.createWriteStream(tmpPath);
+      let settled = false;
+
+      const fail = (err) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        file.close();
+        fs.unlink(tmpPath, () => {});
+        reject(err);
+      };
 
       const doRequest = (requestUrl, redirectCount) => {
         if (redirectCount > MAX_REDIRECTS) {
-          file.close();
-          fs.unlink(tmpPath, () => {});
-          reject(new Error('Too many redirects'));
+          fail(new Error('Too many redirects'));
           return;
         }
 
         const protocol = requestUrl.startsWith('https://') ? https : http;
-        protocol.get(requestUrl, (response) => {
+        const request = protocol.get(requestUrl, (response) => {
           if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
             response.resume();
-            doRequest(response.headers.location, redirectCount + 1);
+            // Location may be relative to the requested URL
+            doRequest(new URL(response.headers.location, requestUrl).toString(), redirectCount + 1);
             return;
           }
 
           if (response.statusCode !== 200) {
-            file.close();
-            fs.unlink(tmpPath, () => {});
-            reject(new Error(`HTTP ${response.statusCode}`));
+            response.resume();
+            fail(new Error(`HTTP ${response.statusCode}`));
             return;
           }
 
+          response.on('error', fail);
           response.pipe(file);
           file.on('finish', () => {
             file.close(() => {
               fs.rename(tmpPath, destPath, (err) => {
                 if (err) {
-                  fs.unlink(tmpPath, () => {});
-                  reject(err);
+                  fail(err);
                 } else {
+                  settled = true;
                   resolve();
                 }
               });
             });
           });
-          file.on('error', (err) => {
-            file.close();
-            fs.unlink(tmpPath, () => {});
-            reject(err);
-          });
-        }).on('error', (err) => {
-          file.close();
-          fs.unlink(tmpPath, () => {});
-          reject(err);
+          file.on('error', fail);
         });
+
+        // A speaker or server that stops answering must not stall the refresh.
+        request.setTimeout(timeoutMs, () => {
+          request.destroy(new Error(`Album art download timed out after ${timeoutMs} ms`));
+        });
+        request.on('error', fail);
       };
 
       doRequest(url, 0);

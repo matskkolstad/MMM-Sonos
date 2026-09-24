@@ -25,7 +25,7 @@ Module.register('MMM-Sonos', {
     showPlaybackState: false,
     showLastUpdated: false,
     timeFormat24: true,
-  dateLocale: 'en-US',
+    dateLocale: 'en-US',
     maxTextLines: 2,
     accentuateActive: true,
     showAlbum: false,
@@ -75,9 +75,13 @@ Module.register('MMM-Sonos', {
     this.progressAnimationTimer = null;
     this._animTransitionTimer = null;
     this._fullUpdateDebounceTimer = null;
+    this._fullUpdateDoneTimer = null;
+    this._fullUpdateInProgress = false;
+    this._rerenderAfterFullUpdate = false;
 
-  this._log('Starting MMM-Sonos module');
-    this.sendSocketNotification('SONOS_CONFIG', this.config);
+    this._log('Starting MMM-Sonos module');
+    // instanceId lets node_helper keep each instance's settings apart (it is shared).
+    this.sendSocketNotification('SONOS_CONFIG', { ...this.config, instanceId: this.identifier });
     this.scheduleRefresh();
     this._startProgressAnimation();
   },
@@ -99,6 +103,10 @@ Module.register('MMM-Sonos', {
       clearTimeout(this._fullUpdateDebounceTimer);
       this._fullUpdateDebounceTimer = null;
     }
+    if (this._fullUpdateDoneTimer) {
+      clearTimeout(this._fullUpdateDoneTimer);
+      this._fullUpdateDoneTimer = null;
+    }
   },
 
   scheduleRefresh() {
@@ -107,13 +115,13 @@ Module.register('MMM-Sonos', {
     }
 
     this.updateTimer = setInterval(() => {
-  this._log('Requesting update from node_helper');
+      this._log('Requesting update from node_helper');
       this.sendSocketNotification('SONOS_REQUEST');
     }, Math.max(this.config.updateInterval, 5000));
   },
 
   socketNotificationReceived(notification, payload) {
-  this._log('Received socket notification', notification);
+    this._log('Received socket notification', notification);
 
     switch (notification) {
       case 'SONOS_DATA': {
@@ -126,6 +134,22 @@ Module.register('MMM-Sonos', {
         this.groups = newGroups;
         this.lastUpdated = newTimestamp;
         this.error = null;
+
+        if (this._fullUpdateDebounceTimer) {
+          // A full re-render is already scheduled; it renders the latest this.groups.
+          // Per-card updates now would only touch DOM that is about to be replaced.
+          this._log('Full update pending — data stored for it');
+          break;
+        }
+
+        if (this._fullUpdateInProgress) {
+          // MagicMirror is swapping in content built from older data. Render again once
+          // it is done so this update is not lost.
+          if (needsFull || changedIds.size > 0 || volumeChangedIds.size > 0) {
+            this._rerenderAfterFullUpdate = true;
+          }
+          break;
+        }
 
         if (needsFull) {
           this._log('Structural change — full DOM update');
@@ -290,9 +314,9 @@ Module.register('MMM-Sonos', {
       return wrapper;
     }
 
-  const displayMode = this._resolveDisplayMode();
-  wrapper.classList.add(`mmm-sonos--mode-${displayMode}`);
-  this._applyLayoutMode(wrapper, displayMode, cardMinValue, gridColumns);
+    const displayMode = this._resolveDisplayMode();
+    wrapper.classList.add(`mmm-sonos--mode-${displayMode}`);
+    this._applyLayoutMode(wrapper, displayMode, cardMinValue, gridColumns);
 
     const isMiniMode = displayMode === 'mini';
     const isFullscreenMode = displayMode === 'fullscreen';
@@ -302,7 +326,9 @@ Module.register('MMM-Sonos', {
       const targetGroup = this._resolveFullscreenGroup();
       groupsToRender = targetGroup ? [this._renderFullscreenGroup(targetGroup)].filter(Boolean) : [];
     } else {
+      // Filter before applying maxGroups so hidden or paused groups do not use up slots.
       groupsToRender = this.groups
+        .filter((group) => this._isGroupVisible(group))
         .slice(0, this.config.maxGroups)
         .map((group) => isMiniMode ? this._renderMiniGroup(group) : this._renderGroup(group))
         .filter(Boolean);
@@ -1212,6 +1238,11 @@ Module.register('MMM-Sonos', {
         }
         if (!newEl) { el.remove(); return; }
 
+        // A full re-render may have replaced the card in the meantime.
+        if (el.parentNode !== parent) {
+          return;
+        }
+
         if (animInClass) {
           newEl.style.setProperty('--mmm-sonos-card-anim-duration', `${halfDuration}ms`);
           newEl.classList.add(animInClass);
@@ -1238,9 +1269,12 @@ Module.register('MMM-Sonos', {
   _animatedUpdateDom() {
     const debounceMs = 300;
 
+    // Keep an already scheduled update instead of restarting the timer: it renders
+    // this.groups as it is when it fires, so later data is included anyway, and
+    // restarting on every notification could postpone the update indefinitely while
+    // data keeps arriving.
     if (this._fullUpdateDebounceTimer) {
-      clearTimeout(this._fullUpdateDebounceTimer);
-      this._fullUpdateDebounceTimer = null;
+      return;
     }
 
     this._fullUpdateDebounceTimer = setTimeout(() => {
@@ -1251,11 +1285,27 @@ Module.register('MMM-Sonos', {
 
   _executeAnimatedUpdateDom() {
     const animation = (this.config.transitionAnimation || 'fade').toLowerCase();
+    const duration = animation === 'none' ? 0 : Math.max(200, Number(this.config.transitionDuration) || 400);
+
+    // MagicMirror builds the new content right away and swaps it in after the
+    // animation, so track the update until then (updateDom() returns no promise).
+    this._fullUpdateInProgress = true;
+    if (this._fullUpdateDoneTimer) {
+      clearTimeout(this._fullUpdateDoneTimer);
+    }
+    this._fullUpdateDoneTimer = setTimeout(() => {
+      this._fullUpdateDoneTimer = null;
+      this._fullUpdateInProgress = false;
+      if (this._rerenderAfterFullUpdate) {
+        this._rerenderAfterFullUpdate = false;
+        this._animatedUpdateDom();
+      }
+    }, duration + 100);
+
     if (animation === 'none') {
       this.updateDom(0);
       return;
     }
-    const duration = Math.max(200, Number(this.config.transitionDuration) || 400);
     const animMap = {
       'fade':        { out: 'fadeOut',      in: 'fadeIn' },
       'slide-up':    { out: 'fadeOutUp',    in: 'fadeInUp' },
@@ -1367,7 +1417,8 @@ Module.register('MMM-Sonos', {
   },
 
   // Resolve which group to show in fullscreen mode.
-  // If fullscreenSpeaker is configured, find the matching group; otherwise use the first group.
+  // If fullscreenSpeaker is configured, find the matching group; otherwise use the first
+  // group this instance would show (respecting allowed/hidden filters and showWhenPaused).
   _resolveFullscreenGroup() {
     if (!this.groups || !this.groups.length) {
       return null;
@@ -1376,15 +1427,30 @@ Module.register('MMM-Sonos', {
     const speaker = (this.config.fullscreenSpeaker || '').toLowerCase().trim();
     if (speaker) {
       const match = this.groups.find((g) =>
-        (g.name || '').toLowerCase() === speaker ||
-        (g.id || '').toLowerCase() === speaker ||
-        (g.coordinatorHost || '').toLowerCase() === speaker ||
-        (g.members || []).some((m) => m.toLowerCase() === speaker)
+        !this._isHidden(g) && (
+          (g.name || '').toLowerCase() === speaker ||
+          (g.id || '').toLowerCase() === speaker ||
+          (g.coordinatorHost || '').toLowerCase() === speaker ||
+          (g.members || []).some((m) => m.toLowerCase() === speaker)
+        )
       );
-      return match || this.groups[0];
+      if (match) {
+        return match;
+      }
     }
 
-    return this.groups[0];
+    return this.groups.find((g) => this._isGroupVisible(g)) || null;
+  },
+
+  // True when this instance would render the group: not filtered out by the
+  // allowed/hidden lists, and playing (or paused with showWhenPaused enabled).
+  _isGroupVisible(group) {
+    if (!group || this._isHidden(group)) {
+      return false;
+    }
+    const playbackState = (group.playbackState || '').toLowerCase();
+    const isPlaying = ['playing', 'transitioning', 'buffering'].includes(playbackState);
+    return isPlaying || !!this.config.showWhenPaused;
   },
 
   // Render a large, full-width card for fullscreen mode.

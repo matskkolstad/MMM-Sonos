@@ -39,12 +39,21 @@ module.exports = [
     }
   },
   {
-    files: ['test/**/*.test.js'],
+    files: ['test/**/*.js'],
     languageOptions: {
       ecmaVersion: 2021,
       sourceType: 'commonjs',
       globals: {
         ...globals.node
+      }
+    }
+  },
+  {
+    // page.evaluate() callbacks in the end-to-end test run in the browser
+    files: ['test/e2e/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.browser
       }
     }
   }

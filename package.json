@@ -1,12 +1,14 @@
 {
   "name": "mmm-sonos",
-  "version": "1.0.0",
+  "version": "1.4.0",
   "description": "MagicMirror² module that shows what is playing on your Sonos speakers.",
   "main": "MMM-Sonos.js",
   "scripts": {
     "start": "node node_helper.js",
     "test": "node --test test/**/*.test.js",
-    "lint": "eslint *.js test/*.js",
+    "test:e2e": "node --test --test-reporter=spec test/e2e/mirror.e2e.js",
+    "sim": "node test/e2e/fake-sonos.js",
+    "lint": "eslint *.js test/",
     "audit": "npm audit"
   },
   "keywords": [

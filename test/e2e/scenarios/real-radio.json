@@ -1,0 +1,53 @@
+{
+  "description": "Radio as reported by a real Sonos system (debug log from the maintainer's mirror, 2026-09-24): NRK P3 via the NRK Radio service and P4 via myTuner Radio, plus the same P4 stream from a radio app that reports no station name.",
+  "speakers": [
+    { "uuid": "RINCON_SIM000000000001400", "name": "Bad", "port": 1400 },
+    { "uuid": "RINCON_SIM000000000001401", "name": "Kjøkken", "port": 1401 },
+    { "uuid": "RINCON_SIM000000000001402", "name": "Stue", "port": 1402 }
+  ],
+  "groups": [
+    {
+      "coordinator": "RINCON_SIM000000000001400",
+      "state": "playing",
+      "volume": 4,
+      "track": {
+        "uri": "x-sonosapi-hls:live%3ap3?sid=277&flags=8232&sn=3",
+        "class": "object.item",
+        "duration": 0
+      },
+      "media": {
+        "uri": "x-sonosapi-hls:live%3ap3?sid=277&flags=8232&sn=3",
+        "title": "NRK P3",
+        "art": "orange"
+      }
+    },
+    {
+      "coordinator": "RINCON_SIM000000000001401",
+      "state": "playing",
+      "volume": 6,
+      "track": {
+        "uri": "x-rincon-mp3radio://https://p4.p4groupaudio.com/P04_MM?args=3rdparty_03",
+        "title": "P04_MM?args=3rdparty_03",
+        "streamContent": "ABBA - Dancing Queen",
+        "class": "object.item",
+        "duration": 0
+      },
+      "media": {
+        "uri": "x-rincon-mp3radio://https://p4.p4groupaudio.com/P04_MM?args=3rdparty_03",
+        "title": "P4 Lyden av Norge",
+        "art": "red"
+      }
+    },
+    {
+      "coordinator": "RINCON_SIM000000000001402",
+      "state": "playing",
+      "volume": 10,
+      "track": {
+        "uri": "x-rincon-mp3radio://https://p4.p4groupaudio.com/P04_MM?args=3rdparty_03",
+        "title": "P04_MM?args=3rdparty_03",
+        "class": "object.item",
+        "duration": 0
+      }
+    }
+  ]
+}
