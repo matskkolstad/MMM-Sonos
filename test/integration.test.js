@@ -21,6 +21,14 @@ const baseConfig = {
   maxGroups: 6
 };
 
+// node_helper with touch controls. Delayed follow-up refreshes are off, so they cannot
+// fire into a later test; the test for them turns them on explicitly.
+function controlsHelper() {
+  const helper = loadNodeHelper({ ...baseConfig, enableControls: true });
+  helper._followUpDelays = [];
+  return helper;
+}
+
 async function fetchGroups(config = {}) {
   const helper = loadNodeHelper({ ...baseConfig, ...config });
   helper.coordinator = await helper._discoverViaKnownDevices();
@@ -146,14 +154,14 @@ describe('node_helper against the Sonos simulator', () => {
     });
 
     it('lists the favorites that can be played and skips Sonos Radio entries without an address', async () => {
-      const helper = loadNodeHelper({ ...baseConfig, enableControls: true });
+      const helper = controlsHelper();
       await helper._refresh();
       await helper._favoritesPromise;
       assert.deepEqual(helper.favorites.map((f) => f.title), ['NRK P3', 'P4 Lyden av Norge', 'Your Top Songs 2021']);
     });
 
     it('plays each of the real favorites: two radio streams and a Spotify playlist', async () => {
-      const helper = loadNodeHelper({ ...baseConfig, enableControls: true });
+      const helper = controlsHelper();
       await helper._refresh();
       await helper._favoritesPromise;
       const stue = () => helper.lastPayload.find((g) => g.members.includes('Stue'));
@@ -283,7 +291,7 @@ describe('node_helper against the Sonos simulator', () => {
 
     beforeEach(async () => {
       sim.setScenario(loadScenario('controls'));
-      helper = loadNodeHelper({ ...baseConfig, enableControls: true });
+      helper = controlsHelper();
       helper.coordinator = await helper._discoverViaKnownDevices();
       await helper._refresh();
     });
@@ -381,7 +389,7 @@ describe('node_helper against the Sonos simulator', () => {
     // Reported on a real system: favorites only appeared minutes after startup when the
     // speakers had not been found yet at startup.
     it('loads favorites as soon as the speakers are found, not minutes later', async () => {
-      const fresh = loadNodeHelper({ ...baseConfig, enableControls: true });
+      const fresh = controlsHelper();
       await fresh._refreshFavorites(); // at startup: no speaker known yet
       assert.equal(fresh._favoritesLoaded, undefined);
 
@@ -426,7 +434,7 @@ describe('node_helper against the Sonos simulator', () => {
     // Reported on a real system: the first speaker found could not list favorites.
     it('loads favorites from another speaker when the first one cannot list them', async () => {
       sim.scenario.speakers.find((sp) => sp.port === 1400).noFavorites = true;
-      const fresh = loadNodeHelper({ ...baseConfig, enableControls: true });
+      const fresh = controlsHelper();
       await fresh._refresh();
       await fresh._favoritesPromise;
       assert.equal(fresh.favorites.length, 4);
@@ -436,7 +444,7 @@ describe('node_helper against the Sonos simulator', () => {
       for (const sp of sim.scenario.speakers) {
         sp.noFavorites = true;
       }
-      const fresh = loadNodeHelper({ ...baseConfig, enableControls: true });
+      const fresh = controlsHelper();
       await fresh._refresh();
       await fresh._favoritesPromise;
       sim.requests = [];
@@ -444,6 +452,94 @@ describe('node_helper against the Sonos simulator', () => {
       await fresh._refresh();
       await fresh._favoritesPromise;
       assert.equal(sim.requests.filter((r) => r.action === 'Browse').length, 0);
+    });
+
+    it('reports play mode, mute state and whether skipping is possible', () => {
+      assert.equal(zone('Kitchen').shuffle, false);
+      assert.equal(zone('Kitchen').repeat, 'none');
+      assert.equal(zone('Kitchen').muted, false);
+      assert.equal(zone('Kitchen').canSkip, true);
+    });
+
+    it('skips to the next and previous track', async () => {
+      await helper._handleNext(zone('Kitchen').id);
+      await settle();
+      assert.equal(lastResult().success, true, lastResult().error);
+      assert.equal(zone('Kitchen').title, 'Somebody Told Me');
+
+      await helper._handlePrevious(zone('Kitchen').id);
+      await settle();
+      assert.equal(zone('Kitchen').title, 'Mr. Brightside');
+    });
+
+    it('turns shuffle on and off without changing repeat', async () => {
+      await helper._handleSetRepeat(zone('Kitchen').id, 'all');
+      await helper._handleSetShuffle(zone('Kitchen').id, true);
+      await settle();
+      assert.equal(zone('Kitchen').shuffle, true);
+      assert.equal(zone('Kitchen').repeat, 'all');
+      assert.equal(sim.scenario.groups[0].playMode, 'SHUFFLE');
+
+      await helper._handleSetShuffle(zone('Kitchen').id, false);
+      await settle();
+      assert.equal(zone('Kitchen').shuffle, false);
+      assert.equal(sim.scenario.groups[0].playMode, 'REPEAT_ALL');
+    });
+
+    it('sets repeat to one, all and off', async () => {
+      for (const [repeat, mode] of [['one', 'REPEAT_ONE'], ['all', 'REPEAT_ALL'], ['none', 'NORMAL']]) {
+        await helper._handleSetRepeat(zone('Kitchen').id, repeat);
+        await settle();
+        assert.equal(zone('Kitchen').repeat, repeat);
+        assert.equal(sim.scenario.groups[0].playMode, mode);
+      }
+    });
+
+    it('mutes and unmutes every speaker in a group', async () => {
+      await helper._handleSetMute(zone('Hallway').id, true);
+      await settle();
+      assert.equal(zone('Hallway').muted, true);
+      assert.deepEqual(zone('Hallway').memberDetails.map((m) => m.muted), [true, true]);
+
+      await helper._handleSetMute(zone('Hallway').id, false);
+      await settle();
+      assert.equal(zone('Hallway').muted, false);
+    });
+
+    it('mutes a single speaker in a group', async () => {
+      await helper._handleSetMemberMute(zone('Hallway').id, 'Hallway', true);
+      await settle();
+      assert.deepEqual(zone('Hallway').memberDetails.map((m) => [m.name, m.muted]), [['Living Room', false], ['Hallway', true]]);
+      assert.equal(zone('Hallway').muted, false, 'the group counts as muted only when every speaker is');
+    });
+
+    it('cannot skip on a radio stream, and says so instead of failing silently', async () => {
+      await helper._refreshFavorites();
+      const nrk = helper.favorites.find((f) => f.title === 'NRK P3');
+      await helper._handlePlayFavorite(zone('Office').id, nrk.id);
+      await settle();
+      assert.equal(zone('Office').canSkip, false);
+
+      await helper._handleNext(zone('Office').id);
+      assert.equal(lastResult().success, false);
+      assert.match(lastResult().error, /UPnP error 701/);
+    });
+
+    it('rejects an unknown repeat mode without contacting a speaker', async () => {
+      sim.requests = [];
+      await helper._handleSetRepeat(zone('Kitchen').id, 'forever');
+      assert.deepEqual(lastResult(), { zoneId: zone('Kitchen').id, action: 'setRepeat', success: false, error: 'Invalid repeat mode' });
+      assert.equal(sim.requests.length, 0);
+    });
+
+    it('checks again shortly after grouping, when Sonos has settled the new topology', async () => {
+      helper._followUpDelays = [30];
+      await helper._handleJoinGroup(zone('Kitchen').id, zone('Bedroom').id);
+      await settle();
+      sim.requests = [];
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      await settle();
+      assert.ok(sim.requests.some((r) => r.action === 'GetZoneGroupState'), 'no follow-up refresh');
     });
 
     it('reports an error for an unknown zone without contacting any speaker', async () => {

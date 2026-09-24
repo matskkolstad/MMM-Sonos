@@ -15,7 +15,8 @@
  * and the control actions used by touch control mode (enableControls):
  *   Play, Pause, SetVolume, SetAVTransportURI (favorites and x-rincon: joins),
  *   BecomeCoordinatorOfStandaloneGroup (leave group), Browse FV:2 (favorites),
- *   RemoveAllTracksFromQueue, AddURIToQueue and playing from the queue.
+ *   RemoveAllTracksFromQueue, AddURIToQueue and playing from the queue,
+ *   Next, Previous, GetTransportSettings/SetPlayMode (shuffle/repeat), GetMute/SetMute.
  * Control actions change the simulated state, just like on real speakers.
  *
  * The responses mirror the XML a real Sonos speaker returns, so node_helper.js
@@ -171,11 +172,32 @@ class FakeSonos {
     // Volume is per speaker on Sonos; a group's volume initialises all its members.
     this.volumes = new Map();
     this.queues = new Map(); // speaker uuid -> queued tracks
+    this.mutes = new Map(); // speaker uuid -> muted
+    // A group may start out playing from its queue (scenario: "queue": [tracks]); its
+    // track is then queue[0] and next/previous/shuffle/repeat work on it.
+    for (const group of this.scenario.groups) {
+      if (Array.isArray(group.queue) && group.queue.length) {
+        this.queues.set(group.coordinator, group.queue);
+        group.queueIndex = 0;
+        group.track = { ...group.queue[0] };
+        group.fromQueue = true;
+      }
+    }
     for (const group of this.scenario.groups) {
       for (const uuid of group.members?.length ? group.members : [group.coordinator]) {
         this.volumes.set(uuid, group.volume ?? 20);
       }
     }
+  }
+
+  moveInQueue(group, index) {
+    const queue = this.queues.get(group.coordinator) || [];
+    if (!queue[index]) {
+      return;
+    }
+    group.queueIndex = index;
+    group.track = { ...queue[index] };
+    this.scenarioStartedAt = Date.now(); // the new track starts from its own position
   }
 
   groupContaining(uuid) {
@@ -438,6 +460,8 @@ class FakeSonos {
           own.track = { ...first, uri: first.uri };
           own.media = { uri };
           own.state = 'stopped';
+          own.fromQueue = true;
+          own.queueIndex = 0;
           return reply('');
         }
         // Like a real speaker: containers (playlists, albums) cannot be set as the
@@ -452,6 +476,7 @@ class FakeSonos {
         // without it a stream reports the end of its URL as title.
         const title = (metadata.match(/<dc:title>([^<]*)<\/dc:title>/) || [])[1];
         own.track = { uri, title: title || uri.split('/').pop(), class: 'object.item', duration: 0 };
+        own.fromQueue = false; // a stream replaces the queue as the source
         own.media = { uri, title, art: title ? favorite?.art : undefined };
         own.state = 'stopped';
         return reply('');
@@ -474,7 +499,48 @@ class FakeSonos {
         );
       }
 
-      case 'Seek':
+      case 'Seek': {
+        if (FakeSonos.soapValue(body, 'Unit') === 'TRACK_NR' && group?.fromQueue) {
+          this.moveInQueue(group, Number(FakeSonos.soapValue(body, 'Target')) - 1);
+        }
+        return reply('');
+      }
+
+      // Like real speakers: skipping and play modes only work when playing from the
+      // queue; a radio stream answers with UPnP errors.
+      case 'Next':
+      case 'Previous': {
+        if (!group?.fromQueue) {
+          return fault(res, 701); // transition not available
+        }
+        const queue = this.queues.get(group.coordinator) || [];
+        let index = group.queueIndex + (action === 'Next' ? 1 : -1);
+        const repeatAll = ['REPEAT_ALL', 'SHUFFLE'].includes(group.playMode);
+        if (index >= queue.length) {
+          if (!repeatAll) {
+            return fault(res, 711); // illegal seek target
+          }
+          index = 0;
+        }
+        this.moveInQueue(group, Math.max(0, index));
+        return reply('');
+      }
+
+      case 'GetTransportSettings':
+        return reply(`<PlayMode>${group?.playMode || 'NORMAL'}</PlayMode><RecQualityMode>NOT_IMPLEMENTED</RecQualityMode>`);
+
+      case 'SetPlayMode':
+        if (!group?.fromQueue) {
+          return fault(res, 712); // play mode not supported
+        }
+        group.playMode = FakeSonos.soapValue(body, 'NewPlayMode');
+        return reply('');
+
+      case 'GetMute':
+        return reply(`<CurrentMute>${this.mutes.get(speaker.uuid) ? 1 : 0}</CurrentMute>`);
+
+      case 'SetMute':
+        this.mutes.set(speaker.uuid, FakeSonos.soapValue(body, 'DesiredMute') === '1');
         return reply('');
 
       case 'Browse': {

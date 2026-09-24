@@ -40,7 +40,36 @@
         "art": "blue",
         "duration": 222,
         "position": 95
-      }
+      },
+      "queue": [
+        {
+          "uri": "x-sonos-spotify:spotify%3atrack%3a3n3Ppam7vgaVa1iaRUc9Lp?sid=12&flags=8224&sn=7",
+          "title": "Mr. Brightside",
+          "artist": "The Killers",
+          "album": "Hot Fuss",
+          "art": "blue",
+          "duration": 222,
+          "position": 95
+        },
+        {
+          "uri": "x-sonos-spotify:spotify%3atrack%3a0eGsygTp906u18L0Oimnem?sid=12&flags=8224&sn=7",
+          "title": "Somebody Told Me",
+          "artist": "The Killers",
+          "album": "Hot Fuss",
+          "art": "orange",
+          "duration": 197,
+          "position": 0
+        },
+        {
+          "uri": "x-sonos-spotify:spotify%3atrack%3a5eWgDlp3k6Tb5RD8690s6I?sid=12&flags=8224&sn=7",
+          "title": "All These Things That I've Done",
+          "artist": "The Killers",
+          "album": "Hot Fuss",
+          "art": "teal",
+          "duration": 301,
+          "position": 0
+        }
+      ]
     },
     {
       "coordinator": "RINCON_SIM000000000001401",

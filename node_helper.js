@@ -99,6 +99,24 @@ module.exports = NodeHelper.create({
       case 'SONOS_CONTROL_PLAY_FAVORITE':
         this._handlePlayFavorite(payload?.zoneId, payload?.favoriteId);
         break;
+      case 'SONOS_CONTROL_NEXT':
+        this._handleNext(payload?.zoneId);
+        break;
+      case 'SONOS_CONTROL_PREVIOUS':
+        this._handlePrevious(payload?.zoneId);
+        break;
+      case 'SONOS_CONTROL_SET_SHUFFLE':
+        this._handleSetShuffle(payload?.zoneId, payload?.shuffle);
+        break;
+      case 'SONOS_CONTROL_SET_REPEAT':
+        this._handleSetRepeat(payload?.zoneId, payload?.repeat);
+        break;
+      case 'SONOS_CONTROL_SET_MUTE':
+        this._handleSetMute(payload?.zoneId, payload?.muted);
+        break;
+      case 'SONOS_CONTROL_SET_MEMBER_MUTE':
+        this._handleSetMemberMute(payload?.zoneId, payload?.memberName, payload?.muted);
+        break;
     }
   },
 
@@ -515,13 +533,112 @@ module.exports = NodeHelper.create({
   // After a control action, fetch fresh state so the change shows up right away. A
   // refresh that is already running started before the action, so queue a new one
   // after it instead of sharing its (now stale) result.
-  _refreshAfterControl() {
+  _refreshAfterControl({ followUp = false } = {}) {
     this.lastPayloadAt = null;
     if (this._refreshPromise) {
       this._refreshPromise.then(() => this._refresh());
     } else {
       this._refresh();
     }
+    // Grouping and starting a favorite take Sonos a moment to settle, so the refresh
+    // right after the command often still sees the old state. Check again shortly
+    // instead of waiting for the next regular update.
+    if (followUp) {
+      for (const delay of this._followUpDelays || [1500, 3500]) {
+        const timer = setTimeout(() => {
+          this.lastPayloadAt = null;
+          this._refresh();
+        }, delay);
+        timer.unref?.();
+      }
+    }
+  },
+
+  // Sonos play modes combine shuffle and repeat into one value.
+  _parsePlayMode(playMode) {
+    const modes = {
+      NORMAL: { shuffle: false, repeat: 'none' },
+      REPEAT_ALL: { shuffle: false, repeat: 'all' },
+      REPEAT_ONE: { shuffle: false, repeat: 'one' },
+      SHUFFLE_NOREPEAT: { shuffle: true, repeat: 'none' },
+      SHUFFLE: { shuffle: true, repeat: 'all' },
+      SHUFFLE_REPEAT_ONE: { shuffle: true, repeat: 'one' }
+    };
+    return modes[playMode] || { shuffle: null, repeat: null };
+  },
+
+  _buildPlayMode(shuffle, repeat) {
+    if (shuffle) {
+      return { none: 'SHUFFLE_NOREPEAT', all: 'SHUFFLE', one: 'SHUFFLE_REPEAT_ONE' }[repeat];
+    }
+    return { none: 'NORMAL', all: 'REPEAT_ALL', one: 'REPEAT_ONE' }[repeat];
+  },
+
+  // Runs a command against the zone's coordinator and reports the result.
+  async _runZoneCommand(zoneId, action, command, { refresh = true } = {}) {
+    const zone = this._findZone(zoneId);
+    if (!zone || !zone.coordinatorHost) {
+      this._sendControlResult(zoneId, action, false, 'Zone not found');
+      return;
+    }
+    try {
+      await command(new Sonos(zone.coordinatorHost, zone.coordinatorPort || 1400), zone);
+      this._sendControlResult(zoneId, action, true);
+      if (refresh) {
+        this._refreshAfterControl();
+      }
+    } catch (error) {
+      this._sendControlResult(zoneId, action, false, error?.message || String(error));
+    }
+  },
+
+  _handleNext(zoneId) {
+    return this._runZoneCommand(zoneId, 'next', (device) => device.next());
+  },
+
+  _handlePrevious(zoneId) {
+    return this._runZoneCommand(zoneId, 'previous', (device) => device.previous());
+  },
+
+  // Shuffle and repeat are one Sonos play mode, so read the current mode first and
+  // change only the part that was asked for.
+  _handleSetShuffle(zoneId, shuffle) {
+    return this._runZoneCommand(zoneId, 'setShuffle', async (device) => {
+      const current = this._parsePlayMode(await device.getPlayMode());
+      await device.setPlayMode(this._buildPlayMode(Boolean(shuffle), current.repeat || 'none'));
+    });
+  },
+
+  _handleSetRepeat(zoneId, repeat) {
+    if (!['none', 'all', 'one'].includes(repeat)) {
+      this._sendControlResult(zoneId, 'setRepeat', false, 'Invalid repeat mode');
+      return Promise.resolve();
+    }
+    return this._runZoneCommand(zoneId, 'setRepeat', async (device) => {
+      const current = this._parsePlayMode(await device.getPlayMode());
+      await device.setPlayMode(this._buildPlayMode(Boolean(current.shuffle), repeat));
+    });
+  },
+
+  // Muting a group mutes every speaker in it, like the group volume slider.
+  _handleSetMute(zoneId, muted) {
+    return this._runZoneCommand(zoneId, 'setMute', (device, zone) => {
+      const targets = (zone.memberDetails || []).filter((m) => m.host);
+      if (!targets.length) {
+        return device.setMuted(Boolean(muted));
+      }
+      return Promise.all(targets.map((m) => new Sonos(m.host, m.port || 1400).setMuted(Boolean(muted))));
+    });
+  },
+
+  _handleSetMemberMute(zoneId, memberName, muted) {
+    return this._runZoneCommand(zoneId, 'setMemberMute', (device, zone) => {
+      const target = this._resolveMemberTarget(zone, memberName);
+      if (!target) {
+        throw new Error('Speaker not found in zone');
+      }
+      return new Sonos(target.host, target.port).setMuted(Boolean(muted));
+    });
   },
 
   // Sonos accepts integer volumes 0–100; anything else from the browser is rejected.
@@ -633,7 +750,7 @@ module.exports = NodeHelper.create({
         plan.targetMembers.map((member) => new Sonos(member.host, member.port).joinGroup(plan.anchorRoomName))
       );
       this._sendControlResult(zoneId, 'joinGroup', true);
-      this._refreshAfterControl();
+      this._refreshAfterControl({ followUp: true });
     } catch (error) {
       this._sendControlResult(zoneId, 'joinGroup', false, error?.message || String(error));
     }
@@ -649,7 +766,7 @@ module.exports = NodeHelper.create({
     try {
       await new Sonos(target.host, target.port).leaveGroup();
       this._sendControlResult(zoneId, 'leaveGroup', true);
-      this._refreshAfterControl();
+      this._refreshAfterControl({ followUp: true });
     } catch (error) {
       this._sendControlResult(zoneId, 'leaveGroup', false, error?.message || String(error));
     }
@@ -671,7 +788,7 @@ module.exports = NodeHelper.create({
       this._sendControlResult(zoneId, 'playFavorite', true);
       // Without this, the overlay only learns the new track on the next regular poll
       // tick (up to `updateInterval`, e.g. 15s) — same pattern as join/leave.
-      this._refreshAfterControl();
+      this._refreshAfterControl({ followUp: true });
     } catch (error) {
       this._sendControlResult(zoneId, 'playFavorite', false, error?.message || String(error));
     }
@@ -883,24 +1000,30 @@ module.exports = NodeHelper.create({
           ? memberDetails
           : [{ name: effectiveMembers[0], host: coordinator.host || null, port: coordinator.port || 1400 }];
 
-        // Per-speaker volumes are only needed by the touch-control overlay, so skip the
-        // extra network round trips (one getVolume() per member) unless controls are on.
-        if (this.config.enableControls && effectiveMemberDetails.length > 1) {
+        // Per-speaker volume and mute state and the play mode are only needed by the
+        // touch-control overlay, so skip these round trips unless controls are on.
+        let playMode = null;
+        if (this.config.enableControls) {
+          const isGroup = effectiveMemberDetails.length > 1;
           effectiveMemberDetails = await Promise.all(
             effectiveMemberDetails.map(async (member) => {
               if (!member.host) {
-                return { ...member, volume: null };
+                return { ...member, volume: null, muted: null };
               }
-              try {
-                const memberVolume = await new Sonos(member.host, member.port || 1400).getVolume();
-                return { ...member, volume: memberVolume };
-              } catch (error) {
-                this.sendDebug('Failed to fetch member volume', member.name, error?.message || error);
-                return { ...member, volume: null };
-              }
+              const device = new Sonos(member.host, member.port || 1400);
+              const [memberVolume, muted] = await Promise.all([
+                isGroup ? device.getVolume().catch(() => null) : Promise.resolve(volume),
+                device.getMuted().catch(() => null)
+              ]);
+              return { ...member, volume: memberVolume, muted };
             })
           );
+          if (!isTvSource && !isRadioSource) {
+            playMode = await coordinator.getPlayMode().catch(() => null);
+          }
         }
+        const { shuffle, repeat } = this._parsePlayMode(playMode);
+        const mutedStates = effectiveMemberDetails.map((m) => m.muted).filter((m) => m !== null && m !== undefined);
 
         formatted.push({
           id: id || coordinator.uuid || coordinator.host,
@@ -908,6 +1031,12 @@ module.exports = NodeHelper.create({
           coordinatorHost: coordinator.host || null,
           coordinatorPort: coordinator.port || 1400,
           coordinatorUuid: typeof group.Coordinator === 'string' ? group.Coordinator : null,
+          // Skipping and play modes need a queue; radio and TV have none.
+          canSkip: !isTvSource && !isRadioSource,
+          shuffle,
+          repeat,
+          // A group counts as muted when every speaker in it is muted.
+          muted: mutedStates.length ? mutedStates.every(Boolean) : null,
           memberDetails: effectiveMemberDetails,
           playbackState: state,
           title: displayTitle,
@@ -938,10 +1067,11 @@ module.exports = NodeHelper.create({
   },
 
   _sendControlResult(zoneId, action, success, error) {
+    const message = error ? this._describeError(error) : null;
     if (!success) {
-      Log.warn(`[MMM-Sonos] Control action "${action}" failed for zone ${zoneId}: ${this._describeError(error)}`);
+      Log.warn(`[MMM-Sonos] Control action "${action}" failed for zone ${zoneId}: ${message}`);
     }
-    this.sendSocketNotification('SONOS_CONTROL_RESULT', { zoneId, action, success, error: error || null });
+    this.sendSocketNotification('SONOS_CONTROL_RESULT', { zoneId, action, success, error: message });
   },
 
   _resolveCoordinator(group) {
