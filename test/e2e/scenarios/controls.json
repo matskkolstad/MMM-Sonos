@@ -1,0 +1,46 @@
+{
+  "description": "Touch control mode: two playing zones (one grouped), two idle speakers and three Sonos favorites.",
+  "speakers": [
+    { "uuid": "RINCON_SIM000000000001400", "name": "Kitchen", "port": 1400 },
+    { "uuid": "RINCON_SIM000000000001401", "name": "Living Room", "port": 1401 },
+    { "uuid": "RINCON_SIM000000000001402", "name": "Hallway", "port": 1402 },
+    { "uuid": "RINCON_SIM000000000001403", "name": "Bedroom", "port": 1403 },
+    { "uuid": "RINCON_SIM000000000001404", "name": "Office", "port": 1404 }
+  ],
+  "groups": [
+    {
+      "coordinator": "RINCON_SIM000000000001400",
+      "state": "playing",
+      "volume": 25,
+      "track": {
+        "uri": "x-sonos-spotify:spotify%3atrack%3a3n3Ppam7vgaVa1iaRUc9Lp?sid=12&flags=8224&sn=7",
+        "title": "Mr. Brightside",
+        "artist": "The Killers",
+        "album": "Hot Fuss",
+        "art": "blue",
+        "duration": 222,
+        "position": 95
+      }
+    },
+    {
+      "coordinator": "RINCON_SIM000000000001401",
+      "members": ["RINCON_SIM000000000001401", "RINCON_SIM000000000001402"],
+      "state": "playing",
+      "volume": 30,
+      "track": {
+        "uri": "x-sonosapi-hls-static:song%3a1440818839?sid=204&flags=8224&sn=3",
+        "title": "Blinding Lights",
+        "artist": "The Weeknd",
+        "album": "After Hours",
+        "art": "red",
+        "duration": 200,
+        "position": 42
+      }
+    }
+  ],
+  "favorites": [
+    { "title": "NRK P3", "uri": "x-sonosapi-hls:live%3ap3?sid=277&flags=8232&sn=3", "art": "orange" },
+    { "title": "P4 Lyden av Norge", "uri": "x-rincon-mp3radio://https://p4.p4groupaudio.com/P04_MM?args=3rdparty_03", "art": "red" },
+    { "title": "Radio Norge", "uri": "x-rincon-mp3radio://https://live-bauerno.sharp-stream.com/radionorge_no_mp3", "art": "green" }
+  ]
+}

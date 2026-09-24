@@ -6,7 +6,7 @@
  * No MagicMirror² or browser needed, so these run as part of `npm test`.
  */
 
-const { describe, it, before, after } = require('node:test');
+const { describe, it, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { loadNodeHelper } = require('./helpers/load-module');
@@ -223,6 +223,94 @@ describe('node_helper against the Sonos simulator', () => {
       helper.socketNotificationReceived('SONOS_REQUEST');
       await helper._refreshPromise;
       assert.ok(sim.requests.some((r) => r.action === 'GetZoneGroupState'), 'the request polled the speakers');
+    });
+  });
+
+  describe('touch control mode (enableControls) against the simulator', () => {
+    let helper;
+    const zone = (name) => helper.lastPayload.find((g) => g.members.includes(name));
+    const settle = async () => {
+      // Control handlers queue a refresh; wait for it (and any it was queued behind).
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      while (helper._refreshPromise) {
+        await helper._refreshPromise;
+      }
+    };
+    const lastResult = () => helper.notifications.filter((n) => n.notification === 'SONOS_CONTROL_RESULT').at(-1).payload;
+
+    beforeEach(async () => {
+      sim.setScenario(loadScenario('controls'));
+      helper = loadNodeHelper({ ...baseConfig, enableControls: true });
+      helper.coordinator = await helper._discoverViaKnownDevices();
+      await helper._refresh();
+    });
+
+    it('includes idle speakers so they can be started', () => {
+      assert.equal(zone('Bedroom').playbackState, 'stopped');
+      assert.equal(zone('Office').playbackState, 'stopped');
+    });
+
+    it('reports per-speaker volume for grouped zones', () => {
+      assert.deepEqual(zone('Hallway').memberDetails.map((m) => [m.name, m.volume]), [['Living Room', 30], ['Hallway', 30]]);
+    });
+
+    it('pauses and resumes a zone, and the change is visible right away', async () => {
+      await helper._handlePause(zone('Kitchen').id);
+      await settle();
+      assert.equal(lastResult().success, true);
+      assert.equal(zone('Kitchen').playbackState, 'paused');
+
+      await helper._handlePlay(zone('Kitchen').id);
+      await settle();
+      assert.equal(zone('Kitchen').playbackState, 'playing');
+    });
+
+    it('sets the volume of every speaker in a group', async () => {
+      await helper._handleSetVolume(zone('Hallway').id, 12);
+      await helper._refresh(); // volume changes are not followed by a refresh (sliders send many)
+      assert.deepEqual(zone('Hallway').memberDetails.map((m) => m.volume), [12, 12]);
+    });
+
+    it('sets the volume of a single speaker in a group', async () => {
+      await helper._handleSetMemberVolume(zone('Hallway').id, 'Hallway', 45);
+      await helper._refresh();
+      assert.deepEqual(zone('Hallway').memberDetails.map((m) => [m.name, m.volume]), [['Living Room', 30], ['Hallway', 45]]);
+    });
+
+    it('joins another speaker into a group and removes it again', async () => {
+      await helper._handleJoinGroup(zone('Kitchen').id, zone('Bedroom').id);
+      await settle();
+      assert.equal(lastResult().success, true);
+      assert.deepEqual(zone('Kitchen').members, ['Kitchen', 'Bedroom']);
+
+      await helper._handleLeaveGroup(zone('Kitchen').id, 'Bedroom');
+      await settle();
+      assert.deepEqual(zone('Kitchen').members, ['Kitchen']);
+      assert.deepEqual(zone('Bedroom').members, ['Bedroom']);
+    });
+
+    it('loads the Sonos favorites', async () => {
+      await helper._refreshFavorites();
+      assert.deepEqual(helper.favorites.map((f) => f.title), ['NRK P3', 'P4 Lyden av Norge', 'Radio Norge']);
+      assert.equal(helper.notifications.at(-1).notification, 'SONOS_FAVORITES');
+    });
+
+    it('plays a favorite on an idle speaker', async () => {
+      await helper._refreshFavorites();
+      const nrk = helper.favorites.find((f) => f.title === 'NRK P3');
+      await helper._handlePlayFavorite(zone('Office').id, nrk.id);
+      await settle();
+      assert.equal(lastResult().success, true);
+      assert.equal(zone('Office').playbackState, 'playing');
+      assert.equal(zone('Office').title, 'NRK P3');
+      assert.equal(zone('Office').source, 'radio');
+    });
+
+    it('reports an error for an unknown zone without contacting any speaker', async () => {
+      sim.requests = [];
+      await helper._handlePlay('no-such-zone');
+      assert.deepEqual(lastResult(), { zoneId: 'no-such-zone', action: 'play', success: false, error: 'Zone not found' });
+      assert.equal(sim.requests.length, 0);
     });
   });
 

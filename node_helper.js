@@ -405,7 +405,7 @@ module.exports = NodeHelper.create({
       return;
     }
     try {
-      await new Sonos(zone.coordinatorHost).play();
+      await new Sonos(zone.coordinatorHost, zone.coordinatorPort || 1400).play();
       this._sendControlResult(zoneId, 'play', true);
       this._refreshAfterControl();
     } catch (error) {
@@ -420,7 +420,7 @@ module.exports = NodeHelper.create({
       return;
     }
     try {
-      await new Sonos(zone.coordinatorHost).pause();
+      await new Sonos(zone.coordinatorHost, zone.coordinatorPort || 1400).pause();
       this._sendControlResult(zoneId, 'pause', true);
       this._refreshAfterControl();
     } catch (error) {
@@ -532,7 +532,7 @@ module.exports = NodeHelper.create({
       return;
     }
     try {
-      await new Sonos(zone.coordinatorHost).setAVTransportURI(favorite.uri);
+      await new Sonos(zone.coordinatorHost, zone.coordinatorPort || 1400).setAVTransportURI(favorite.uri);
       this._sendControlResult(zoneId, 'playFavorite', true);
       // Without this, the overlay only learns the new track on the next regular poll
       // tick (up to `updateInterval`, e.g. 15s) — same pattern as join/leave.
